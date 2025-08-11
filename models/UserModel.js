@@ -1,0 +1,215 @@
+const mongoose = require("mongoose");
+
+// Define schema
+const userSchema = new mongoose.Schema(
+  {
+    // Basic authentication info
+    username: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      lowercase: true,
+    },
+    password: {
+      type: String,
+      required: true,
+      select: false, // Prevent accidental exposure
+    },
+
+    // Profile completion
+    profileCompleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Personal Identity
+    nickname: {
+      type: String,
+      trim: true,
+      required: false,
+    },
+    about: {
+      type: String,
+      trim: true,
+    },
+    gender: {
+      type: String,
+      enum: ["man", "woman", "other"],
+    },
+    sexuality: {
+      type: String,
+      enum: ["straight", "gay", "bisexual", "asexual", "pansexual", "other"],
+    },
+    dateOfBirth: {
+      type: Date,
+      required: false,
+    },
+
+    // Geo Location for Nearby Filter
+    geoLocation: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        index: "2dsphere",
+      },
+    },
+    location: {
+      type: String,
+      trim: true,
+    },
+    postcode: {
+      type: String,
+      trim: true,
+    },
+
+    // Appearance & Lifestyle
+    height: {
+      type: Number, // in cm
+    },
+    bodyType: {
+      type: String,
+      enum: ["athletic", "average", "chubby", "curvy", "other"],
+    },
+    ethnicity: {
+      type: String,
+      enum: [
+        "white",
+        "black",
+        "asian",
+        "latino",
+        "middleEastern",
+        "nativeAmerican",
+        "pacificIslander",
+        "other",
+      ],
+    },
+
+    tattoos: {
+      type: Boolean,
+      default: false,
+    },
+    piercings: {
+      type: Boolean,
+      default: false,
+    },
+    drinker: {
+      type: Boolean,
+      default: false,
+    },
+    smoker: {
+      type: Boolean,
+      default: false,
+    },
+    openToTravel: {
+      type: Boolean,
+      default: false,
+    },
+    openToAccommodate: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Match Preferences
+    lookingFor: [
+      {
+        type: String,
+        enum: ["man", "woman", "coupleMF", "coupleMM", "coupleFF", "TVTSCD"],
+      },
+    ],
+    ageRange: {
+      min: {
+        type: Number,
+        default: 18,
+      },
+      max: {
+        type: Number,
+        default: 65,
+      },
+    },
+    preferences: {
+      nonSmoker: {
+        type: Boolean,
+        default: false,
+      },
+      nonDrinker: {
+        type: Boolean,
+        default: false,
+      },
+      openToTravel: {
+        type: Boolean,
+        default: false,
+      },
+      openToAccommodate: {
+        type: Boolean,
+        default: false,
+      },
+    },
+
+    // Profile images
+    profileImage: {
+      type: String,
+      default: "",
+    },
+
+    // Account status
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    lastActive: {
+      type: Date,
+      default: Date.now,
+    },
+    keepSignedIn: {
+      type: Boolean,
+      default: false,
+    },
+    winkInterests: {
+      type: [String],
+      default: [],
+    },
+
+    // Online status (for real-time systems)
+    isOnline: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    timestamps: true, // auto add createdAt and updatedAt
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  }
+);
+
+// Indexes
+userSchema.index({ username: 1 });
+userSchema.index({ nickname: 1 });
+userSchema.index({ email: 1 });
+userSchema.index({ geoLocation: "2dsphere" });
+
+// Virtual field to calculate age from DOB
+userSchema.virtual("age").get(function () {
+  if (!this.dateOfBirth) return null;
+  const ageDifMs = Date.now() - this.dateOfBirth.getTime();
+  const ageDate = new Date(ageDifMs);
+  return Math.abs(ageDate.getUTCFullYear() - 1970);
+});
+
+const User = mongoose.model("User", userSchema);
+module.exports = User;

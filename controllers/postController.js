@@ -1,0 +1,877 @@
+const Post = require("../models/post/PostModel");
+const PostLike = require("../models/post/PostLikeModel");
+const PostWink = require("../models/post/PostWinkModel");
+const PostHotlist = require("../models/post/PostHotlistModel");
+const { v4: uuidv4 } = require("uuid");
+const s3 = require("../utils/s3");
+const mongoose = require("mongoose");
+const NotificationService = require("../services/notificationService");
+
+const createPost = async (req, res) => {
+  try {
+    const { caption, privacy = "public", location } = req.body;
+    const userId = req.user.userId; // Fixed: should be req.user.userId
+    const uploadedImageUrls = [];
+
+    if (req.files && req.files.length > 0) {
+      for (let file of req.files) {
+        const fileName = `posts/${uuidv4()}-${file.originalname}`;
+
+        const params = {
+          Bucket: process.env.AWS_S3_BUCKET_NAME,
+          Key: fileName,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+        };
+
+        const uploadResult = await s3.upload(params).promise();
+        uploadedImageUrls.push(uploadResult.Location); // public URL
+      }
+    }
+
+    const parsedLocation =
+      typeof location === "string" ? JSON.parse(location) : location;
+
+    const post = await Post.create({
+      caption,
+      images: uploadedImageUrls,
+      privacy,
+      userId,
+      location: parsedLocation,
+    });
+
+    // Populate user details before sending response
+    const populatedPost = await Post.findById(post._id)
+      .populate("userId", "username profileImage nickname")
+      .lean();
+
+    res.status(201).json(populatedPost);
+  } catch (error) {
+    console.log("Error in createPost:", error);
+    res.status(500).json({ error: error.message || "Internal server error" });
+  }
+};
+
+// Function to get posts with base64 images - OLD VERSION (COMMENTED)
+/*
+const getPosts = async (req, res) => {
+  try {
+    const {
+      privacy,
+      userId,
+      latitude,
+      longitude,
+      radius = 10,
+      lastPostId,
+      limit = 20,
+    } = req.query;
+    const currentUserId = req.user.userId;
+    const currentUserIdObj = new mongoose.Types.ObjectId(currentUserId);
+
+    let query = {};
+
+    // If filtering by a specific user
+    if (userId) {
+      query.userId = userId;
+
+      if (privacy === "private") {
+        // Only allow private posts if currentUserId === userId
+        if (currentUserId === userId) {
+          query.privacy = "private";
+        } else {
+          return res
+            .status(403)
+            .json({ error: "Unauthorized to view private posts of this user" });
+        }
+      } else if (privacy === "public") {
+        query.privacy = "public";
+      } else {
+        // No privacy param — return public posts only unless it's the current user's own profile
+        query.privacy =
+          currentUserId === userId ? { $in: ["public", "private"] } : "public";
+      }
+    } else {
+      // No userId filter — return public + current user's private posts
+      if (privacy === "private") {
+        query = {
+          userId: currentUserIdObj,
+          privacy: "private",
+        };
+      } else if (privacy === "public") {
+        query = { privacy: "public" };
+      } else {
+        query = {
+          $or: [
+            { privacy: "public" },
+            { userId: currentUserIdObj, privacy: "private" },
+          ],
+        };
+      }
+    }
+
+    // Track if we need geospatial query
+    let hasLocationFilter = false;
+    let locationParams = null;
+
+    // Add location-based filtering if coordinates are provided
+    if (latitude && longitude) {
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      const radiusKm = parseFloat(radius);
+
+      if (!isNaN(lat) && !isNaN(lng) && !isNaN(radiusKm)) {
+        hasLocationFilter = true;
+        locationParams = {
+          lat,
+          lng,
+          radiusKm,
+          maxDistance: radiusKm * 1000,
+        };
+      }
+    }
+
+    if (lastPostId && mongoose.Types.ObjectId.isValid(lastPostId)) {
+      query._id = { $lt: new mongoose.Types.ObjectId(lastPostId) };
+    }
+
+    // Build aggregation pipeline
+    let pipeline = [];
+
+    // If we have location filter, start with $geoNear
+    if (hasLocationFilter) {
+      console.log("hasLocationFilter=======", hasLocationFilter);
+      pipeline.push({
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [locationParams.lng, locationParams.lat],
+          },
+          distanceField: "distance",
+          maxDistance: locationParams.maxDistance,
+          spherical: true,
+          query: query,
+        },
+      });
+    } else {
+      // Regular $match for non-geospatial queries
+      pipeline.push({ $match: query });
+    }
+
+    // Add the rest of the pipeline
+    pipeline.push(
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "userInfo",
+          pipeline: [
+            {
+              $project: {
+                username: 1,
+                nickname: 1,
+                profileImage: 1,
+                verified: 1,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: "postwinks",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$postId", "$$postId"] },
+                    {
+                      $eq: [
+                        "$userId",
+                        new mongoose.Types.ObjectId(currentUserId),
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "userWink",
+        },
+      },
+      {
+        $lookup: {
+          from: "postlikes",
+          localField: "_id",
+          foreignField: "postId",
+          as: "likes",
+        },
+      },
+      {
+        $lookup: {
+          from: "postlikes",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$postId", "$$postId"] },
+                    {
+                      $eq: [
+                        "$userId",
+                        new mongoose.Types.ObjectId(currentUserId),
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "userLike",
+        },
+      },
+      {
+        $lookup: {
+          from: "posthotlists",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$postId", "$$postId"] },
+                    {
+                      $eq: [
+                        "$userId",
+                        new mongoose.Types.ObjectId(currentUserId),
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "userHotlist",
+        },
+      },
+      {
+        $addFields: {
+          userId: { $arrayElemAt: ["$userInfo", 0] },
+          likes: { $size: "$likes" },
+          isLiked: { $gt: [{ $size: "$userLike" }, 0] },
+          isWinked: { $gt: [{ $size: "$userWink" }, 0] },
+          isHotlisted: { $gt: [{ $size: "$userHotlist" }, 0] },
+        },
+      },
+      {
+        $project: {
+          userInfo: 0,
+          userLike: 0,
+          userWink: 0,
+          userHotlist: 0,
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: parseInt(limit) }
+    );
+
+    // Use aggregation to get posts with like count and user like status
+    const posts = await Post.aggregate(pipeline);
+    console.log("posts", posts);
+
+    res.json(posts);
+  } catch (error) {
+    console.error("Error in getPosts:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+*/
+
+// Function to get posts with base64 images - NEW VERSION (with friend access to private posts)
+const getPosts = async (req, res) => {
+  try {
+    const {
+      privacy,
+      userId,
+      latitude,
+      longitude,
+      radius = 10,
+      lastPostId,
+      limit = 20,
+    } = req.query;
+    const currentUserId = req.user.userId;
+    const currentUserIdObj = new mongoose.Types.ObjectId(currentUserId);
+
+    // First, get the current user's friends list
+    const currentUser = await require("../models/UserModel").findById(
+      currentUserId
+    );
+    const userFriends = currentUser?.friends || [];
+    const userFriendsObjIds = userFriends.map((friendId) =>
+      typeof friendId === "string"
+        ? new mongoose.Types.ObjectId(friendId)
+        : friendId
+    );
+
+    let query = {};
+
+    // If filtering by a specific user
+    if (userId) {
+      query.userId = userId;
+
+      if (privacy === "private") {
+        // Allow private posts if currentUserId === userId OR if current user is friends with the post owner
+        if (
+          currentUserId === userId ||
+          userFriendsObjIds.some((friendId) => friendId.toString() === userId)
+        ) {
+          query.privacy = "private";
+        } else {
+          return res
+            .status(403)
+            .json({ error: "Unauthorized to view private posts of this user" });
+        }
+      } else if (privacy === "public") {
+        query.privacy = "public";
+      } else {
+        // No privacy param — return public posts + private posts if user is owner or friend
+        if (
+          currentUserId === userId ||
+          userFriendsObjIds.some((friendId) => friendId.toString() === userId)
+        ) {
+          query.privacy = { $in: ["public", "private"] };
+        } else {
+          query.privacy = "public";
+        }
+      }
+    } else {
+      // No userId filter — return public + current user's private posts + friends' private posts
+      if (privacy === "private") {
+        query = {
+          $or: [
+            { userId: currentUserIdObj, privacy: "private" },
+            {
+              userId: { $in: userFriendsObjIds },
+              privacy: "private",
+            },
+          ],
+        };
+      } else if (privacy === "public") {
+        query = { privacy: "public" };
+      } else {
+        query = {
+          $or: [
+            { privacy: "public" },
+            { userId: currentUserIdObj, privacy: "private" },
+            {
+              userId: { $in: userFriendsObjIds },
+              privacy: "private",
+            },
+          ],
+        };
+      }
+    }
+
+    // Track if we need geospatial query
+    let hasLocationFilter = false;
+    let locationParams = null;
+
+    // Add location-based filtering if coordinates are provided
+    if (latitude && longitude) {
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      const radiusKm = parseFloat(radius);
+
+      if (!isNaN(lat) && !isNaN(lng) && !isNaN(radiusKm)) {
+        hasLocationFilter = true;
+        locationParams = {
+          lat,
+          lng,
+          radiusKm,
+          maxDistance: radiusKm * 1000,
+        };
+      }
+    }
+
+    if (lastPostId && mongoose.Types.ObjectId.isValid(lastPostId)) {
+      query._id = { $lt: new mongoose.Types.ObjectId(lastPostId) };
+    }
+
+    // Build aggregation pipeline
+    let pipeline = [];
+
+    // If we have location filter, start with $geoNear
+    if (hasLocationFilter) {
+      console.log("hasLocationFilter=======", hasLocationFilter);
+      pipeline.push({
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [locationParams.lng, locationParams.lat],
+          },
+          distanceField: "distance",
+          maxDistance: locationParams.maxDistance,
+          spherical: true,
+          query: query,
+        },
+      });
+    } else {
+      // Regular $match for non-geospatial queries
+      pipeline.push({ $match: query });
+    }
+
+    // Add the rest of the pipeline
+    pipeline.push(
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "userInfo",
+          pipeline: [
+            {
+              $project: {
+                username: 1,
+                nickname: 1,
+                profileImage: 1,
+                verified: 1,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: "postwinks",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$postId", "$$postId"] },
+                    {
+                      $eq: [
+                        "$userId",
+                        new mongoose.Types.ObjectId(currentUserId),
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "userWink",
+        },
+      },
+      {
+        $lookup: {
+          from: "postlikes",
+          localField: "_id",
+          foreignField: "postId",
+          as: "likes",
+        },
+      },
+      {
+        $lookup: {
+          from: "postlikes",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$postId", "$$postId"] },
+                    {
+                      $eq: [
+                        "$userId",
+                        new mongoose.Types.ObjectId(currentUserId),
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "userLike",
+        },
+      },
+      {
+        $lookup: {
+          from: "posthotlists",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$postId", "$$postId"] },
+                    {
+                      $eq: [
+                        "$userId",
+                        new mongoose.Types.ObjectId(currentUserId),
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "userHotlist",
+        },
+      },
+      {
+        $addFields: {
+          userId: { $arrayElemAt: ["$userInfo", 0] },
+          likes: { $size: "$likes" },
+          isLiked: { $gt: [{ $size: "$userLike" }, 0] },
+          isWinked: { $gt: [{ $size: "$userWink" }, 0] },
+          isHotlisted: { $gt: [{ $size: "$userHotlist" }, 0] },
+        },
+      },
+      {
+        $project: {
+          userInfo: 0,
+          userLike: 0,
+          userWink: 0,
+          userHotlist: 0,
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      { $limit: parseInt(limit) }
+    );
+
+    // Use aggregation to get posts with like count and user like status
+    const posts = await Post.aggregate(pipeline);
+    console.log("posts", posts);
+
+    res.json(posts);
+  } catch (error) {
+    console.error("Error in getPosts:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const deletePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+
+    const post = await Post.findOne({ _id: postId });
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    if (post.userId.toString() !== userId.toString()) {
+      return res
+        .status(403)
+        .json({ error: "Unauthorized to delete this post" });
+    }
+
+    await Promise.all([
+      Post.findByIdAndDelete(postId),
+      PostLike.deleteMany({ postId }),
+      PostWink.deleteMany({ postId }),
+      PostHotlist.deleteMany({ postId }),
+    ]);
+
+    res.json({ message: "Post deleted successfully" });
+  } catch (error) {
+    console.log("Error deleting post");
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const likePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if post exists
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    // Check if user already liked the post
+    const existingLike = await PostLike.findOne({ postId, userId });
+    if (existingLike) {
+      return res.status(400).json({ error: "Post already liked" });
+    }
+
+    // Create new like
+    const like = await PostLike.create({ postId, userId });
+
+    // Get updated like count
+    const likeCount = await PostLike.countDocuments({ postId });
+
+    // Create notification for post owner
+    try {
+      await NotificationService.createPostLikeNotification(
+        userId,
+        post.userId,
+        postId
+      );
+    } catch (notificationError) {
+      console.error("Error creating like notification:", notificationError);
+      // Don't fail the request if notification fails
+    }
+
+    // Emit socket event for real-time updates
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("post-liked", {
+        postId,
+        userId,
+        likeCount,
+        isLiked: true,
+      });
+    }
+
+    res.status(201).json({
+      message: "Post liked successfully",
+      like,
+      likeCount,
+      isLiked: true,
+    });
+  } catch (error) {
+    console.error("Error in likePost:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const unlikePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if post exists
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    // Remove like
+    const deletedLike = await PostLike.findOneAndDelete({ postId, userId });
+    if (!deletedLike) {
+      return res.status(400).json({ error: "Post not liked" });
+    }
+
+    // Get updated like count
+    const likeCount = await PostLike.countDocuments({ postId });
+
+    // Emit socket event for real-time updates
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("post-unliked", {
+        postId,
+        userId,
+        likeCount,
+        isLiked: false,
+      });
+    }
+
+    res.json({
+      message: "Post unliked successfully",
+      likeCount,
+      isLiked: false,
+    });
+  } catch (error) {
+    console.error("Error in unlikePost:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const winkPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if post exists
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    // Check if user already liked the post
+    const existingWink = await PostWink.findOne({ postId, userId });
+    if (existingWink) {
+      return res.status(400).json({ error: "Post already winked" });
+    }
+
+    // Create new like
+    const wink = await PostWink.create({ postId, userId });
+
+    // Get updated like count
+    const winkCount = await PostWink.countDocuments({ postId });
+
+    // Emit socket event for real-time updates
+    // const io = req.app.get("io");
+    // if (io) {
+    //   io.emit("post-winked", {
+    //     postId,
+    //     userId,
+    //     winkCount,
+    //     isWinked: true,
+    //   });
+    // }
+
+    res.status(201).json({
+      message: "Post winked successfully",
+      wink,
+      winkCount,
+      isWinked: true,
+    });
+  } catch (error) {
+    console.error("Error in winkPost:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const unwinkPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if post exists
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    // Remove like
+    const deletedWink = await PostWink.findOneAndDelete({ postId, userId });
+    if (!deletedWink) {
+      return res.status(400).json({ error: "Post not winked" });
+    }
+
+    // Get updated like count
+    const winkCount = await PostWink.countDocuments({ postId });
+
+    // Emit socket event for real-time updates
+    // const io = req.app.get("io");
+    // if (io) {
+    //   io.emit("post-unwinked", {
+    //     postId,
+    //     userId,
+    //     winkCount,
+    //     isWinked: false,
+    //   });
+    // }
+
+    res.json({
+      message: "Post unwinked successfully",
+      winkCount,
+      isWinked: false,
+    });
+  } catch (error) {
+    console.error("Error in unwinkPost:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const hotlistPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if post exists
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    // Check if user already hotlisted the post
+    const existingHotlist = await PostHotlist.findOne({ postId, userId });
+    if (existingHotlist) {
+      return res.status(400).json({ error: "Post already hotlisted" });
+    }
+
+    // Create new hotlist
+    const hotlist = await PostHotlist.create({ postId, userId });
+
+    // Get updated like count
+    const hotlistCount = await PostHotlist.countDocuments({ postId });
+
+    // Emit socket event for real-time updates
+    // const io = req.app.get("io");
+    // if (io) {
+    //   io.emit("post-unwinked", {
+    //     postId,
+    //     userId,
+    //     winkCount,
+    //     isWinked: false,
+    //   });
+    // }
+
+    res.json({
+      message: "Post hotlisted successfully",
+      hotlist,
+      hotlistCount,
+      isHotlisted: true,
+    });
+  } catch (error) {
+    console.error("Error in hotlistPost:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+const unhotlistPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.userId;
+
+    // Check if post exists
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    // Remove like
+    const deletedHotlist = await PostHotlist.findOneAndDelete({
+      postId,
+      userId,
+    });
+    if (!deletedHotlist) {
+      return res.status(400).json({ error: "Post not hotlisted" });
+    }
+
+    // Get updated like count
+    const hotlistCount = await PostHotlist.countDocuments({ postId });
+
+    // Emit socket event for real-time updates
+    // const io = req.app.get("io");
+    // if (io) {
+    //   io.emit("post-unwinked", {
+    //     postId,
+    //     userId,
+    //     winkCount,
+    //     isWinked: false,
+    //   });
+    // }
+
+    res.json({
+      message: "Post unhotlisted successfully",
+      hotlistCount,
+      isHotlisted: false,
+    });
+  } catch (error) {
+    console.error("Error in unhotlistPost:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+module.exports = {
+  createPost,
+  getPosts,
+  deletePost,
+  likePost,
+  unlikePost,
+  winkPost,
+  unwinkPost,
+  hotlistPost,
+  unhotlistPost,
+};
