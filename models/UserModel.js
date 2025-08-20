@@ -167,14 +167,6 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    lastActive: {
-      type: Date,
-      default: Date.now,
-    },
     keepSignedIn: {
       type: Boolean,
       default: false,
@@ -183,11 +175,22 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    lastActive: {
+      type: Date,
+      default: Date.now,
+    },
     // Online status (for real-time systems)
     isOnline: {
       type: Boolean,
       default: false,
+    },
+    lastSeen: {
+      type: Date,
+      default: Date.now,
     },
   },
   {

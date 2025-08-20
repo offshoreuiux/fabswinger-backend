@@ -333,6 +333,344 @@ class NotificationService {
     }
   }
 
+  // Create event application notification
+  static async createEventApplicationNotification(
+    eventCreatorId,
+    applicantId,
+    eventId,
+    eventTitle
+  ) {
+    try {
+      const eventCreator = await User.findById(eventCreatorId).select(
+        "nickname profileImage"
+      );
+      if (!eventCreator) throw new Error("Event creator not found");
+
+      const notificationData = {
+        recipient: eventCreatorId,
+        sender: applicantId,
+        type: "event_application",
+        title: "New Event Application",
+        message: `<span class="text-sm font-semibold capitalize">${eventCreator.nickname}</span> applied to join your event "${eventTitle}"`,
+        relatedItem: eventId,
+        relatedItemModel: "Event",
+        metadata: {
+          action: "view_event",
+          eventId: eventId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating event application notification:", error);
+      throw error;
+    }
+  }
+
+  // Create event application accepted notification
+  static async createEventApplicationAcceptedNotification(
+    eventCreatorId,
+    applicantId,
+    eventId,
+    eventTitle
+  ) {
+    try {
+      const eventCreator = await User.findById(eventCreatorId).select(
+        "nickname profileImage"
+      );
+      if (!eventCreator) throw new Error("Event creator not found");
+
+      const notificationData = {
+        recipient: applicantId,
+        sender: eventCreatorId,
+        type: "event_application_accepted",
+        title: "Event Application Accepted",
+        message: `<span class="text-sm font-semibold capitalize">${eventCreator.nickname}</span> accepted your application to join their event "${eventTitle}"`,
+        relatedItem: eventId,
+        relatedItemModel: "Event",
+        metadata: {
+          action: "view_event",
+          eventId: eventId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error(
+        "Error creating event application accepted notification:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  // Create event application rejected notification
+  static async createEventApplicationRejectedNotification(
+    eventCreatorId,
+    applicantId,
+    eventId,
+    eventTitle
+  ) {
+    try {
+      const eventCreator = await User.findById(eventCreatorId).select(
+        "nickname profileImage"
+      );
+      if (!eventCreator) throw new Error("Event creator not found");
+
+      const notificationData = {
+        recipient: applicantId,
+        sender: eventCreatorId,
+        type: "event_application_rejected",
+        title: "Event Application Rejected",
+        message: `<span class="text-sm font-semibold capitalize">${eventCreator.nickname}</span> rejected your application to join their event "${eventTitle}"`,
+        relatedItem: eventId,
+        relatedItemModel: "Event",
+        metadata: {
+          action: "view_event",
+          eventId: eventId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error(
+        "Error creating event application rejected notification:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  static async updateEventApplicationNotificationStatus(
+    notificationId,
+    newStatus,
+    senderId,
+    eventTitle
+  ) {
+    try {
+      const sender = await User.findById(senderId).select(
+        "nickname profileImage"
+      );
+      if (!sender) throw new Error("Sender not found");
+
+      let updateData = {};
+
+      if (newStatus === "approved") {
+        updateData = {
+          type: "accepted",
+          title: "Request to join event Accepted",
+          message: `You accepted <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your event "${eventTitle}"`,
+        };
+      } else if (newStatus === "rejected") {
+        updateData = {
+          type: "rejected",
+          title: "Request to join event Declined",
+          message: `You declined <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your event "${eventTitle}"`,
+        };
+      }
+
+      const notification = await Notification.findByIdAndUpdate(
+        notificationId,
+        updateData,
+        { new: true }
+      ).populate("sender", "nickname profileImage");
+
+      if (!notification) {
+        throw new Error("Notification not found");
+      }
+
+      // Emit real-time update for the notification type change
+      try {
+        const { emitNotificationTypeChange } = require("../utils/socket");
+        emitNotificationTypeChange(
+          notification.recipient,
+          notificationId,
+          newStatus,
+          notification
+        );
+      } catch (socketError) {
+        console.error("Socket emission error:", socketError);
+        // Don't fail the notification update if socket fails
+      }
+
+      return notification;
+    } catch (error) {
+      console.error(
+        "Error updating friend request notification status:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  static async createMeetApplicationNotification(
+    meetCreatorId,
+    applicantId,
+    meetId,
+    meetTitle
+  ) {
+    try {
+      const meetCreator = await User.findById(meetCreatorId).select(
+        "nickname profileImage"
+      );
+      if (!meetCreator) throw new Error("Meet creator not found");
+
+      const notificationData = {
+        recipient: meetCreatorId,
+        sender: applicantId,
+        type: "meet_application",
+        title: "New Meet Application",
+        message: `<span class="text-sm font-semibold capitalize">${meetCreator.nickname}</span> applied to join your meet "${meetTitle}"`,
+        relatedItem: meetId,
+        relatedItemModel: "Meet",
+        metadata: {
+          action: "view_meet",
+          meetId: meetId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating meet application notification:", error);
+      throw error;
+    }
+  }
+
+  static async createMeetApplicationAcceptedNotification(
+    meetCreatorId,
+    applicantId,
+    meetId,
+    meetTitle
+  ) {
+    try {
+      const meetCreator = await User.findById(meetCreatorId).select(
+        "nickname profileImage"
+      );
+      if (!meetCreator) throw new Error("Meet creator not found");
+
+      const notificationData = {
+        recipient: applicantId,
+        sender: meetCreatorId,
+        type: "meet_application_accepted",
+        title: "Meet Application Accepted",
+        message: `<span class="text-sm font-semibold capitalize">${meetCreator.nickname}</span> accepted your application to join their meet "${meetTitle}"`,
+        relatedItem: meetId,
+        relatedItemModel: "Meet",
+        metadata: {
+          action: "view_meet",
+          meetId: meetId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error(
+        "Error creating meet application accepted notification:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  // Create event application rejected notification
+  static async createMeetApplicationRejectedNotification(
+    meetCreatorId,
+    applicantId,
+    meetId,
+    meetTitle
+  ) {
+    try {
+      const meetCreator = await User.findById(meetCreatorId).select(
+        "nickname profileImage"
+      );
+      if (!meetCreator) throw new Error("Meet creator not found");
+
+      const notificationData = {
+        recipient: applicantId,
+        sender: meetCreatorId,
+        type: "meet_application_rejected",
+        title: "Meet Application Rejected",
+        message: `<span class="text-sm font-semibold capitalize">${meetCreator.nickname}</span> rejected your application to join their meet "${meetTitle}"`,
+        relatedItem: meetId,
+        relatedItemModel: "Meet",
+        metadata: {
+          action: "view_meet",
+          meetId: meetId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error(
+        "Error creating meet application rejected notification:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  static async updateMeetApplicationNotificationStatus(
+    notificationId,
+    newStatus,
+    senderId,
+    meetTitle
+  ) {
+    try {
+      const sender = await User.findById(senderId).select(
+        "nickname profileImage"
+      );
+      if (!sender) throw new Error("Sender not found");
+
+      let updateData = {};
+
+      if (newStatus === "approved") {
+        updateData = {
+          type: "accepted",
+          title: "Request to join meet Accepted",
+          message: `You accepted <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your meet "${meetTitle}"`,
+        };
+      } else if (newStatus === "rejected") {
+        updateData = {
+          type: "rejected",
+          title: "Request to join meet Declined",
+          message: `You declined <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your meet "${meetTitle}"`,
+        };
+      }
+
+      const notification = await Notification.findByIdAndUpdate(
+        notificationId,
+        updateData,
+        { new: true }
+      ).populate("sender", "nickname profileImage");
+
+      if (!notification) {
+        throw new Error("Notification not found");
+      }
+
+      // Emit real-time update for the notification type change
+      try {
+        const { emitNotificationTypeChange } = require("../utils/socket");
+        emitNotificationTypeChange(
+          notification.recipient,
+          notificationId,
+          newStatus,
+          notification
+        );
+      } catch (socketError) {
+        console.error("Socket emission error:", socketError);
+        // Don't fail the notification update if socket fails
+      }
+
+      return notification;
+    } catch (error) {
+      console.error(
+        "Error updating meet application notification status:",
+        error
+      );
+      throw error;
+    }
+  }
+
   // Get user notifications
   static async getUserNotifications(userId, page = 1, limit = 20) {
     try {

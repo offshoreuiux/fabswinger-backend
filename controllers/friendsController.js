@@ -17,6 +17,31 @@ const getFriendList = async (req, res) => {
   }
 };
 
+const getBlockedFriendList = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const blockedFriendList = await Friends.find({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: "blocked",
+    }).populate("sender receiver", "-password -email");
+
+    const blockedUsersList = [];
+
+    blockedFriendList.forEach((friend) => {
+      if (friend.sender._id.toString() === userId) {
+        blockedUsersList.push(friend.receiver);
+      } else {
+        blockedUsersList.push(friend.sender);
+      }
+    });
+
+    res.json({ blockedUsersList });
+  } catch (error) {
+    console.log("Error in fetching blocked friend list", error);
+    res.status(500).json({ error: "internal server error" });
+  }
+};
+
 const addFriend = async (req, res) => {
   try {
     if (!req.body) {
@@ -97,7 +122,9 @@ const removeFriend = async (req, res) => {
       return res.status(400).json({ error: "Friendship not found" });
     }
 
-    res.status(200).json({ message: "Friend removed successfully" });
+    res
+      .status(200)
+      .json({ message: "Friend removed successfully", friendId: id });
   } catch (error) {
     console.log("Error in fetching friend list", error);
     res.status(500).json({ error: "internal server error" });
@@ -107,22 +134,34 @@ const removeFriend = async (req, res) => {
 const blockProfile = async (req, res) => {
   try {
     if (!req.body) {
-      return res.status(400).json({ error: "id is required" });
+      return res.status(400).json({ error: "friendId is required" });
     }
-    const { id } = req.body;
-    if (!id) {
-      return res.status(400).json({ error: "id is required" });
+    const { friendId } = req.body;
+    if (!friendId) {
+      return res.status(400).json({ error: "friendId is required" });
     }
     const userId = req.user.userId;
 
     const friend = await Friends.findOneAndUpdate(
-      { _id: id, $or: [{ sender: userId }, { receiver: userId }] },
+      {
+        $or: [
+          { sender: userId, receiver: friendId },
+          { sender: friendId, receiver: userId },
+        ],
+      },
       { status: "blocked" },
       { new: true }
     );
 
     if (!friend) {
-      return res.status(400).json({ error: "Friendship not found" });
+      const newFriend = await Friends.create({
+        sender: userId,
+        receiver: friendId,
+        status: "blocked",
+      });
+      if (!newFriend) {
+        return res.status(400).json({ error: "Error blocking profile" });
+      }
     }
 
     res.status(200).json({ message: "Profile blocked successfully" });
@@ -319,6 +358,7 @@ const getOtherUserFriendList = async (req, res) => {
 
 module.exports = {
   getFriendList,
+  getBlockedFriendList,
   addFriend,
   removeFriend,
   blockProfile,

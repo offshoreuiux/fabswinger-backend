@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   getFriendList,
+  getBlockedFriendList,
   addFriend,
   removeFriend,
   blockProfile,
@@ -14,6 +15,8 @@ const { authenticateToken } = require("../middleware");
 router.use(authenticateToken);
 
 router.get("/", getFriendList);
+
+router.get("/blocked", getBlockedFriendList);
 
 router.get("/other/:userId", getOtherUserFriendList);
 
