@@ -1,5 +1,5 @@
 const Event = require("../../models/event/EventSchema");
-const EventHotlist = require("../../models/hotlist/EventHotlistModel");
+const EventHotlist = require("../../models/hotlist/EventHotlistSchema");
 const EventParticipant = require("../../models/event/EventParticipantSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");
@@ -217,6 +217,7 @@ const createEvent = async (req, res) => {
       eventId: newEvent._id,
       userId,
       status: "approved",
+      isCreator: true,
     });
     res
       .status(201)
@@ -468,10 +469,125 @@ const updateEventRules = async (req, res) => {
   }
 };
 
+const getEventsByUser = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { tab = "all", date } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    if (tab === "createdByMe") {
+      const query = { userId };
+      if (date && date !== "undefined" && date !== "null") {
+        const filterDate = new Date(date);
+        if (!isNaN(filterDate.getTime())) {
+          query.date = filterDate;
+        }
+      }
+      const events = await Event.find(query).populate(
+        "userId",
+        "username profilePicture firstName lastName people"
+      );
+      const eventsWithHotlistInfo = await addHotlistInfoToEvents(
+        events,
+        userId
+      );
+      const eventsWithParticipantDetails = await addParticipantDetailsToEvents(
+        eventsWithHotlistInfo,
+        userId
+      );
+      return res.status(200).json({
+        events: eventsWithParticipantDetails,
+        success: true,
+      });
+    } else if (tab === "joinedByMe") {
+      const eventsParticipated = await EventParticipant.find({
+        userId,
+        status: "approved",
+      });
+      const eventsParticipatedIds = eventsParticipated.map(
+        (event) => event.eventId
+      );
+      const query = {
+        _id: { $in: eventsParticipatedIds },
+      };
+      if (date && date !== "undefined" && date !== "null") {
+        const filterDate = new Date(date);
+        if (!isNaN(filterDate.getTime())) {
+          query.date = filterDate;
+        }
+      }
+      const events = await Event.find(query).populate(
+        "userId",
+        "username profilePicture firstName lastName people"
+      );
+      const eventsWithHotlistInfo = await addHotlistInfoToEvents(
+        events,
+        userId
+      );
+      const eventsWithParticipantDetails = await addParticipantDetailsToEvents(
+        eventsWithHotlistInfo,
+        userId
+      );
+      return res.status(200).json({
+        events: eventsWithParticipantDetails,
+        success: true,
+      });
+    } else if (tab === "all") {
+      const eventsParticipated = await EventParticipant.find({
+        userId,
+        status: "approved",
+      });
+
+      const eventsParticipatedIds = eventsParticipated.map(
+        (event) => event.eventId
+      );
+
+      const query = {
+        _id: { $in: eventsParticipatedIds },
+      };
+      if (date && date !== "undefined" && date !== "null") {
+        const filterDate = new Date(date);
+        if (!isNaN(filterDate.getTime())) {
+          query.date = filterDate;
+        }
+      }
+
+      const events = await Event.find(query).populate(
+        "userId",
+        "username profilePicture firstName lastName people"
+      );
+
+      const eventsWithHotlistInfo = await addHotlistInfoToEvents(
+        events,
+        userId
+      );
+
+      const eventsWithParticipantDetails = await addParticipantDetailsToEvents(
+        eventsWithHotlistInfo,
+        userId
+      );
+
+      res
+        .status(200)
+        .json({ events: eventsWithParticipantDetails, success: true });
+    }
+  } catch (error) {
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+      success: false,
+    });
+  }
+};
+
 module.exports = {
   createEvent,
   getEvents,
   updateEvent,
   getEventById,
   updateEventRules,
+  getEventsByUser,
 };

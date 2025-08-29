@@ -7,6 +7,7 @@ const {
   updateEvent,
   getEventById,
   updateEventRules,
+  getEventsByUser,
 } = require("../../controllers/event/eventController");
 const upload = require("../../middleware/upload");
 
@@ -21,5 +22,7 @@ router.patch("/:id/rules", updateEventRules);
 router.get("/", getEvents);
 
 router.get("/:id", getEventById);
+
+router.get("/user/events", getEventsByUser);
 
 module.exports = router;

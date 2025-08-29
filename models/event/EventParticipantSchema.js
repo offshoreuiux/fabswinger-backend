@@ -17,6 +17,10 @@ const eventParticipantSchema = new mongoose.Schema(
       enum: ["applied", "approved"],
       default: "applied",
     },
+    isCreator: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

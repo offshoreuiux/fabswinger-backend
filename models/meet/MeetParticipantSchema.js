@@ -17,6 +17,11 @@ const meetParticipantSchema = new mongoose.Schema(
       enum: ["applied", "approved"],
       default: "applied",
     },
+    role: {
+      type: String,
+      enum: ["organizer", "participant"],
+      default: "participant",
+    },
   },
   {
     timestamps: true,

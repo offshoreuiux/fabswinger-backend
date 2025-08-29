@@ -1,6 +1,7 @@
-const Notification = require("../models/NotificationModel");
-const User = require("../models/UserModel");
+const Notification = require("../models/NotificationSchema");
+const User = require("../models/UserSchema");
 const { emitNotification, emitUnreadCountUpdate } = require("../utils/socket");
+const Comment = require("../models/forum/PostCommentSchema");
 
 class NotificationService {
   // Create a new notification
@@ -41,7 +42,7 @@ class NotificationService {
   ) {
     try {
       const sender = await User.findById(senderId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!sender) throw new Error("Sender not found");
 
@@ -50,7 +51,9 @@ class NotificationService {
         sender: senderId,
         type: "friend_request",
         title: "New Friend Request",
-        message: `<span class="text-sm font-semibold capitalize">${sender.nickname}</span> sent you a friend request`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          sender.nickname || sender.username
+        }</span> sent you a friend request`,
         relatedItem: friendRequestId,
         relatedItemModel: "FriendRequest",
         metadata: {
@@ -74,7 +77,7 @@ class NotificationService {
   ) {
     try {
       const accepter = await User.findById(accepterId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!accepter) throw new Error("Accepter not found");
 
@@ -83,7 +86,9 @@ class NotificationService {
         sender: accepterId,
         type: "friend_request_accepted",
         title: "Friend Request Accepted",
-        message: `<span class="text-sm font-semibold capitalize">${accepter.nickname}</span> accepted your friend request`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          accepter.nickname || accepter.username
+        }</span> accepted your friend request`,
         relatedItem: accepterId,
         relatedItemModel: "User",
         metadata: {
@@ -109,7 +114,7 @@ class NotificationService {
   ) {
     try {
       const rejecter = await User.findById(rejecterId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!rejecter) throw new Error("Rejecter not found");
 
@@ -118,7 +123,9 @@ class NotificationService {
         sender: rejecterId,
         type: "friend_request_rejected",
         title: "Friend Request Declined",
-        message: `<span class="text-sm font-semibold capitalize">${rejecter.nickname}</span> declined your friend request`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          rejecter.nickname || rejecter.username
+        }</span> declined your friend request`,
         relatedItem: rejecterId,
         relatedItemModel: "User",
         metadata: {
@@ -145,7 +152,7 @@ class NotificationService {
       }
 
       const liker = await User.findById(likerId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!liker) throw new Error("Liker not found");
 
@@ -154,12 +161,49 @@ class NotificationService {
         sender: likerId,
         type: "post_like",
         title: "New Like",
-        message: `<span class="text-sm font-semibold capitalize">${liker.nickname}</span> liked your post`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          liker.nickname || liker.username
+        }</span> liked your post`,
         relatedItem: postId,
         relatedItemModel: "Post",
         metadata: {
           action: "view_post",
           postId: postId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating post like notification:", error);
+      throw error;
+    }
+  }
+
+  // Create forumn like notification
+  static async createForumLikeNotification(likerId, postOwnerId, postId) {
+    try {
+      if (likerId.toString() === postOwnerId.toString()) {
+        return null; // Don't notify if user likes their own post
+      }
+
+      const liker = await User.findById(likerId).select(
+        "nickname username profileImage"
+      );
+      if (!liker) throw new Error("Liker not found");
+
+      const notificationData = {
+        recipient: postOwnerId,
+        sender: likerId,
+        type: "forum_like",
+        title: "New Like",
+        message: `<span class="text-sm font-semibold capitalize">${
+          liker.nickname || liker.username
+        }</span> liked your forum post`,
+        relatedItem: postId,
+        relatedItemModel: "ForumPost",
+        metadata: {
+          action: "view_forum_post",
+          forumId: postId,
         },
       };
 
@@ -183,7 +227,7 @@ class NotificationService {
       }
 
       const commenter = await User.findById(commenterId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!commenter) throw new Error("Commenter not found");
 
@@ -197,7 +241,9 @@ class NotificationService {
         sender: commenterId,
         type: "post_comment",
         title: "New Comment",
-        message: `<span class="text-sm font-semibold capitalize">${commenter.nickname}</span> commented: "${truncatedComment}"`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          commenter.nickname || commenter.username
+        }</span> commented: "${truncatedComment}"`,
         relatedItem: postId,
         relatedItemModel: "Post",
         metadata: {
@@ -221,7 +267,7 @@ class NotificationService {
       }
 
       const viewer = await User.findById(viewerId).select(
-        "nickname profileImage"
+        "nickname username  profileImage"
       );
       if (!viewer) throw new Error("Viewer not found");
 
@@ -230,7 +276,9 @@ class NotificationService {
         sender: viewerId,
         type: "profile_view",
         title: "Profile Viewed",
-        message: `<span class="text-sm font-semibold capitalize">${viewer.nickname}</span> viewed your profile`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          viewer.nickname || viewer.username
+        }</span> viewed your profile`,
         relatedItem: viewerId,
         relatedItemModel: "User",
         metadata: {
@@ -342,7 +390,7 @@ class NotificationService {
   ) {
     try {
       const eventCreator = await User.findById(eventCreatorId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!eventCreator) throw new Error("Event creator not found");
 
@@ -351,7 +399,9 @@ class NotificationService {
         sender: applicantId,
         type: "event_application",
         title: "New Event Application",
-        message: `<span class="text-sm font-semibold capitalize">${eventCreator.nickname}</span> applied to join your event "${eventTitle}"`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          eventCreator.nickname || eventCreator.username
+        }</span> applied to join your event "${eventTitle}"`,
         relatedItem: eventId,
         relatedItemModel: "Event",
         metadata: {
@@ -376,7 +426,7 @@ class NotificationService {
   ) {
     try {
       const eventCreator = await User.findById(eventCreatorId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!eventCreator) throw new Error("Event creator not found");
 
@@ -385,7 +435,9 @@ class NotificationService {
         sender: eventCreatorId,
         type: "event_application_accepted",
         title: "Event Application Accepted",
-        message: `<span class="text-sm font-semibold capitalize">${eventCreator.nickname}</span> accepted your application to join their event "${eventTitle}"`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          eventCreator.nickname || eventCreator.username
+        }</span> accepted your application to join their event "${eventTitle}"`,
         relatedItem: eventId,
         relatedItemModel: "Event",
         metadata: {
@@ -413,7 +465,7 @@ class NotificationService {
   ) {
     try {
       const eventCreator = await User.findById(eventCreatorId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!eventCreator) throw new Error("Event creator not found");
 
@@ -422,7 +474,9 @@ class NotificationService {
         sender: eventCreatorId,
         type: "event_application_rejected",
         title: "Event Application Rejected",
-        message: `<span class="text-sm font-semibold capitalize">${eventCreator.nickname}</span> rejected your application to join their event "${eventTitle}"`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          eventCreator.nickname || eventCreator.username
+        }</span> rejected your application to join their event "${eventTitle}"`,
         relatedItem: eventId,
         relatedItemModel: "Event",
         metadata: {
@@ -449,7 +503,7 @@ class NotificationService {
   ) {
     try {
       const sender = await User.findById(senderId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!sender) throw new Error("Sender not found");
 
@@ -459,13 +513,17 @@ class NotificationService {
         updateData = {
           type: "accepted",
           title: "Request to join event Accepted",
-          message: `You accepted <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your event "${eventTitle}"`,
+          message: `You accepted <span class="text-sm font-semibold capitalize">${
+            sender.nickname || sender.username
+          }</span> to join your event "${eventTitle}"`,
         };
       } else if (newStatus === "rejected") {
         updateData = {
           type: "rejected",
           title: "Request to join event Declined",
-          message: `You declined <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your event "${eventTitle}"`,
+          message: `You declined <span class="text-sm font-semibold capitalize">${
+            sender.nickname || sender.username
+          }</span> to join your event "${eventTitle}"`,
         };
       }
 
@@ -511,7 +569,7 @@ class NotificationService {
   ) {
     try {
       const meetCreator = await User.findById(meetCreatorId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!meetCreator) throw new Error("Meet creator not found");
 
@@ -520,7 +578,9 @@ class NotificationService {
         sender: applicantId,
         type: "meet_application",
         title: "New Meet Application",
-        message: `<span class="text-sm font-semibold capitalize">${meetCreator.nickname}</span> applied to join your meet "${meetTitle}"`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          meetCreator.nickname || meetCreator.username
+        }</span> applied to join your meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -544,7 +604,7 @@ class NotificationService {
   ) {
     try {
       const meetCreator = await User.findById(meetCreatorId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!meetCreator) throw new Error("Meet creator not found");
 
@@ -553,7 +613,9 @@ class NotificationService {
         sender: meetCreatorId,
         type: "meet_application_accepted",
         title: "Meet Application Accepted",
-        message: `<span class="text-sm font-semibold capitalize">${meetCreator.nickname}</span> accepted your application to join their meet "${meetTitle}"`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          meetCreator.nickname || meetCreator.username
+        }</span> accepted your application to join their meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -581,7 +643,7 @@ class NotificationService {
   ) {
     try {
       const meetCreator = await User.findById(meetCreatorId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!meetCreator) throw new Error("Meet creator not found");
 
@@ -590,7 +652,9 @@ class NotificationService {
         sender: meetCreatorId,
         type: "meet_application_rejected",
         title: "Meet Application Rejected",
-        message: `<span class="text-sm font-semibold capitalize">${meetCreator.nickname}</span> rejected your application to join their meet "${meetTitle}"`,
+        message: `<span class="text-sm font-semibold capitalize">${
+          meetCreator.nickname || meetCreator.username
+        }</span> rejected your application to join their meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -609,6 +673,79 @@ class NotificationService {
     }
   }
 
+  static async createMeetJoinedNotification(
+    meetCreatorId,
+    applicantId,
+    meetId,
+    meetTitle
+  ) {
+    try {
+      const applicant = await User.findById(applicantId).select(
+        "nickname username profileImage"
+      );
+      if (!applicant) throw new Error("Applicant not found");
+
+      const notificationData = {
+        recipient: meetCreatorId,
+        sender: applicantId,
+        type: "meet_joined",
+        title: "Meet Joined",
+        message: `<span class="text-sm font-semibold capitalize">${
+          applicant.nickname || applicant.username
+        }</span> joined your meet "${meetTitle}"`,
+        relatedItem: meetId,
+        relatedItemModel: "Meet",
+        metadata: {
+          action: "view_meet",
+          meetId: meetId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating meet joined notification:", error);
+      throw error;
+    }
+  }
+
+  static async createMeetJoinConfirmationNotification(
+    meetCreatorId,
+    applicantId,
+    meetId,
+    meetTitle
+  ) {
+    try {
+      const meetCreator = await User.findById(meetCreatorId).select(
+        "nickname username profileImage"
+      );
+      if (!meetCreator) throw new Error("Meet creator not found");
+
+      const notificationData = {
+        recipient: applicantId,
+        sender: meetCreatorId,
+        type: "meet_join_confirmation",
+        title: "Successfully Joined Meet",
+        message: `You have successfully joined <span class="text-sm font-semibold capitalize">${
+          meetCreator.nickname || meetCreator.username
+        }</span>'s meet "${meetTitle}"`,
+        relatedItem: meetId,
+        relatedItemModel: "Meet",
+        metadata: {
+          action: "view_meet",
+          meetId: meetId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error(
+        "Error creating meet join confirmation notification:",
+        error
+      );
+      throw error;
+    }
+  }
+
   static async updateMeetApplicationNotificationStatus(
     notificationId,
     newStatus,
@@ -617,7 +754,7 @@ class NotificationService {
   ) {
     try {
       const sender = await User.findById(senderId).select(
-        "nickname profileImage"
+        "nickname username profileImage"
       );
       if (!sender) throw new Error("Sender not found");
 
@@ -627,13 +764,17 @@ class NotificationService {
         updateData = {
           type: "accepted",
           title: "Request to join meet Accepted",
-          message: `You accepted <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your meet "${meetTitle}"`,
+          message: `You accepted <span class="text-sm font-semibold capitalize">${
+            sender.nickname || sender.username
+          }</span> to join your meet "${meetTitle}"`,
         };
       } else if (newStatus === "rejected") {
         updateData = {
           type: "rejected",
           title: "Request to join meet Declined",
-          message: `You declined <span class="text-sm font-semibold capitalize">${sender.nickname}</span> to join your meet "${meetTitle}"`,
+          message: `You declined <span class="text-sm font-semibold capitalize">${
+            sender.nickname || sender.username
+          }</span> to join your meet "${meetTitle}"`,
         };
       }
 
@@ -667,6 +808,52 @@ class NotificationService {
         "Error updating meet application notification status:",
         error
       );
+      throw error;
+    }
+  }
+
+  static async createForumCommentNotification(
+    commenterId,
+    postOwnerId,
+    postId,
+    parentCommentId
+  ) {
+    try {
+      const commenter = await User.findById(commenterId).select(
+        "nickname username profileImage"
+      );
+      if (!commenter) throw new Error("Commenter not found");
+      let comment = null;
+      if (parentCommentId) {
+        comment = await Comment.findById(parentCommentId).populate(
+          "userId",
+          "nickname username profileImage"
+        );
+      }
+
+      const notificationData = {
+        recipient: comment?.userId?._id || comment?.userId?.id || postOwnerId,
+        sender: commenterId,
+        type: "forum_comment",
+        title: "New Comment",
+        message: `<span class="text-sm font-semibold capitalize">${
+          commenter.nickname || commenter.username
+        }</span> ${
+          parentCommentId
+            ? "replied to your comment"
+            : "commented on your forum post"
+        }`,
+        relatedItem: postId,
+        relatedItemModel: "ForumPost",
+        metadata: {
+          action: "view_forum_post",
+          forumId: postId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating forum comment notification:", error);
       throw error;
     }
   }

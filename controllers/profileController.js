@@ -1,4 +1,4 @@
-const User = require("../models/UserModel");
+const User = require("../models/UserSchema");
 const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const s3 = require("../utils/s3");
@@ -195,7 +195,7 @@ const getProfiles = async (req, res) => {
     }
 
     const profiles = await User.find(query)
-      .select("-password -email -username")
+      .select("-password -email ")
       .sort({ _id: -1 })
       .limit(parseInt(limit));
 

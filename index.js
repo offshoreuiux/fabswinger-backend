@@ -19,6 +19,9 @@ const clubReviewRoutes = require("./routes/club/clubReviewRoute");
 const meetRoutes = require("./routes/meet/meetRoute");
 const meetCommentRoutes = require("./routes/meet/meetCommentRoute");
 const meetParticipantRoutes = require("./routes/meet/meetParticipantRoute");
+const chatRoutes = require("./routes/chat/chatRoute");
+const messageRoutes = require("./routes/chat/messageRoute");
+const forumRoutes = require("./routes/forumRoute");
 
 const app = express();
 const server = http.createServer(app);
@@ -47,6 +50,9 @@ app.use("/api/club-reviews", clubReviewRoutes);
 app.use("/api/meets", meetRoutes);
 app.use("/api/meet-comments", meetCommentRoutes);
 app.use("/api/meet-participants", meetParticipantRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/message", messageRoutes);
+app.use("/api/forum", forumRoutes);
 
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);

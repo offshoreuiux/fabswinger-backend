@@ -19,6 +19,7 @@ const notificationSchema = new mongoose.Schema(
         "friend_request_accepted",
         "friend_request_rejected",
         "post_like",
+        "forum_like",
         "post_comment",
         "post_reply",
         "profile_view",
@@ -32,9 +33,12 @@ const notificationSchema = new mongoose.Schema(
         "event_application_rejected",
         "event_participant_removed",
         "meet_application",
+        "meet_joined",
+        "meet_join_confirmation",
         "meet_application_accepted",
         "meet_application_rejected",
         "meet_participant_removed",
+        "forum_comment",
       ],
       required: true,
     },
@@ -43,7 +47,7 @@ const notificationSchema = new mongoose.Schema(
       required: true,
     },
     message: {
-      type: String,
+      type: String, 
       required: true,
     },
     relatedItem: {
@@ -52,7 +56,7 @@ const notificationSchema = new mongoose.Schema(
     },
     relatedItemModel: {
       type: String,
-      enum: ["User", "Post", "Event", "Meet", "FriendRequest"],
+      enum: ["User", "Post", "Event", "Meet", "FriendRequest", "ForumPost"],
     },
     isRead: {
       type: Boolean,

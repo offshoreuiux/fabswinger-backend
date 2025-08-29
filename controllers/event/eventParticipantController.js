@@ -1,7 +1,7 @@
 const Event = require("../../models/event/EventSchema");
 const EventParticipant = require("../../models/event/EventParticipantSchema");
 const NotificationService = require("../../services/notificationService");
-const Notification = require("../../models/NotificationModel");
+const Notification = require("../../models/NotificationSchema");
 
 const applyToEvent = async (req, res) => {
   try {
@@ -236,6 +236,12 @@ const leaveEvent = async (req, res) => {
     if (!participant) {
       return res.status(404).json({
         message: "You are not an approved participant of this event",
+      });
+    }
+
+    if (participant.isCreator) {
+      return res.status(400).json({
+        message: "You cannot leave an event you created",
       });
     }
 

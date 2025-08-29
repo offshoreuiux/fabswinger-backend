@@ -1,11 +1,13 @@
-const Post = require("../models/post/PostModel");
-const PostLike = require("../models/post/PostLikeModel");
-const PostWink = require("../models/post/PostWinkModel");
-const PostHotlist = require("../models/post/PostHotlistModel");
+const Post = require("../models/post/PostSchema");
+const PostLike = require("../models/post/PostLikeSchema");
+const PostWink = require("../models/post/PostWinkSchema");
+const PostHotlist = require("../models/post/PostHotlistSchema");
 const { v4: uuidv4 } = require("uuid");
 const s3 = require("../utils/s3");
 const mongoose = require("mongoose");
 const NotificationService = require("../services/notificationService");
+const User = require("../models/UserSchema");
+const Friends = require("../models/FriendRequestSchema");
 
 const createPost = async (req, res) => {
   try {
@@ -301,77 +303,121 @@ const getPosts = async (req, res) => {
       radius = 10,
       lastPostId,
       limit = 20,
+      tab,
     } = req.query;
     const currentUserId = req.user.userId;
     const currentUserIdObj = new mongoose.Types.ObjectId(currentUserId);
 
     // First, get the current user's friends list
-    const currentUser = await require("../models/UserModel").findById(
-      currentUserId
-    );
-    const userFriends = currentUser?.friends || [];
-    const userFriendsObjIds = userFriends.map((friendId) =>
-      typeof friendId === "string"
-        ? new mongoose.Types.ObjectId(friendId)
-        : friendId
-    );
+    const currentUser = await User.findById(currentUserId);
+    const userFriends = await Friends.find({
+      $or: [{ sender: currentUserIdObj }, { receiver: currentUserIdObj }],
+      status: "accepted",
+    });
+    const userFriendsObjIds = userFriends.map((friend) => {
+      // Convert both to strings for comparison
+      const receiverStr = friend?.receiver?.toString();
+      const senderStr = friend?.sender?.toString();
+      const currentUserIdStr = currentUserIdObj.toString();
+
+      // Return the other user's ID (not the current user's ID)
+      return receiverStr === currentUserIdStr
+        ? friend?.sender
+        : friend?.receiver;
+    });
 
     let query = {};
 
-    // If filtering by a specific user
-    if (userId) {
-      query.userId = userId;
+    // Handle different tabs first
+    if (tab === "hotlists") {
+      // For hotlists tab, get posts that the current user has hotlisted
+      const userHotlistedPosts = await PostHotlist.find({
+        userId: currentUserIdObj,
+      })
+        .select("postId")
+        .lean();
 
-      if (privacy === "private") {
-        // Allow private posts if currentUserId === userId OR if current user is friends with the post owner
-        if (
-          currentUserId === userId ||
-          userFriendsObjIds.some((friendId) => friendId.toString() === userId)
-        ) {
-          query.privacy = "private";
-        } else {
-          return res
-            .status(403)
-            .json({ error: "Unauthorized to view private posts of this user" });
-        }
-      } else if (privacy === "public") {
-        query.privacy = "public";
-      } else {
-        // No privacy param — return public posts + private posts if user is owner or friend
-        if (
-          currentUserId === userId ||
-          userFriendsObjIds.some((friendId) => friendId.toString() === userId)
-        ) {
-          query.privacy = { $in: ["public", "private"] };
-        } else {
-          query.privacy = "public";
-        }
+      if (userHotlistedPosts.length === 0) {
+        // If user has no hotlisted posts, return empty array
+        console.log("User has no hotlisted posts, returning empty posts array");
+        return res.json({ posts: [], hasMore: false });
       }
+
+      const hotlistedPostIds = userHotlistedPosts.map((hp) => hp.postId);
+      query._id = { $in: hotlistedPostIds };
+
+      // For hotlisted posts, we want to show them regardless of privacy settings
+      // since the user has explicitly saved them
+      query.privacy = { $in: ["public", "private"] };
+    } else if (tab === "friends") {
+      // For friends tab, only show posts from friends (both public and private)
+      if (userFriendsObjIds.length === 0) {
+        // If user has no friends, return empty array
+        console.log("User has no friends, returning empty posts array");
+        return res.json({ posts: [], hasMore: false });
+      }
+
+      query = {
+        userId: { $in: userFriendsObjIds },
+        privacy: { $in: ["public", "private"] },
+      };
     } else {
-      // No userId filter — return public + current user's private posts + friends' private posts
-      if (privacy === "private") {
-        query = {
-          $or: [
-            { userId: currentUserIdObj, privacy: "private" },
-            {
-              userId: { $in: userFriendsObjIds },
-              privacy: "private",
-            },
-          ],
-        };
-      } else if (privacy === "public") {
-        query = { privacy: "public" };
+      // Default behavior for "All" tab or no tab specified
+      // If filtering by a specific user
+      if (userId) {
+        query.userId = userId;
+
+        if (privacy === "private") {
+          // Allow private posts if currentUserId === userId OR if current user is friends with the post owner
+          if (
+            currentUserId === userId ||
+            userFriendsObjIds.some((friendId) => friendId.toString() === userId)
+          ) {
+            query.privacy = "private";
+          } else {
+            return res.status(403).json({
+              error: "Unauthorized to view private posts of this user",
+            });
+          }
+        } else if (privacy === "public") {
+          query.privacy = "public";
+        } else {
+          // No privacy param — return public posts + private posts if user is owner or friend
+          if (
+            currentUserId === userId ||
+            userFriendsObjIds.some((friendId) => friendId.toString() === userId)
+          ) {
+            query.privacy = { $in: ["public", "private"] };
+          } else {
+            query.privacy = "public";
+          }
+        }
       } else {
-        query = {
-          $or: [
-            { privacy: "public" },
-            { userId: currentUserIdObj, privacy: "private" },
-            {
-              userId: { $in: userFriendsObjIds },
-              privacy: "private",
-            },
-          ],
-        };
+        // No userId filter — return public + current user's private posts + friends' private posts
+        if (privacy === "private") {
+          query = {
+            $or: [
+              { userId: currentUserIdObj, privacy: "private" },
+              {
+                userId: { $in: userFriendsObjIds },
+                privacy: "private",
+              },
+            ],
+          };
+        } else if (privacy === "public") {
+          query = { privacy: "public" };
+        } else {
+          query = {
+            $or: [
+              { privacy: "public" },
+              { userId: currentUserIdObj, privacy: "private" },
+              {
+                userId: { $in: userFriendsObjIds },
+                privacy: "private",
+              },
+            ],
+          };
+        }
       }
     }
 
@@ -405,7 +451,6 @@ const getPosts = async (req, res) => {
 
     // If we have location filter, start with $geoNear
     if (hasLocationFilter) {
-      console.log("hasLocationFilter=======", hasLocationFilter);
       pipeline.push({
         $geoNear: {
           near: {
@@ -546,9 +591,9 @@ const getPosts = async (req, res) => {
 
     // Use aggregation to get posts with like count and user like status
     const posts = await Post.aggregate(pipeline);
-    console.log("posts", posts);
+    console.log(`Retrieved ${posts.length} posts for tab: ${tab || "All"}`);
 
-    res.json(posts);
+    res.status(200).json({ posts, hasMore: posts.length === parseInt(limit) });
   } catch (error) {
     console.error("Error in getPosts:", error);
     res.status(500).json({ error: "Internal server error" });

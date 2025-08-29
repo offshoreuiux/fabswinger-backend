@@ -50,6 +50,14 @@ clubSchema.virtual("events", {
   foreignField: "club",
 });
 
+clubSchema.virtual("meets", {
+  ref: "Meet",
+  localField: "_id",
+  foreignField: "club",
+});
+
+clubSchema.index({ name: "text", description: "text" });
+
 clubSchema.set("toJSON", { virtuals: true });
 clubSchema.set("toObject", { virtuals: true });
 

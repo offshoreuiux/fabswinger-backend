@@ -89,11 +89,17 @@ meetSchema.virtual("participants", {
   foreignField: "meetId",
 });
 
-meetSchema.set("toJSON", { virtuals: true });
-meetSchema.set("toObject", { virtuals: true });
-
 // Add geospatial index for coordinates field
 meetSchema.index({ coordinates: "2dsphere" });
+
+meetSchema.index({ userId: 1 });
+
+meetSchema.index({ people: 1 });
+
+meetSchema.index({ meetType: 1 });
+
+meetSchema.set("toJSON", { virtuals: true });
+meetSchema.set("toObject", { virtuals: true });
 
 // Ensure the index is created when the model is first used
 const Meet = mongoose.model("Meet", meetSchema);

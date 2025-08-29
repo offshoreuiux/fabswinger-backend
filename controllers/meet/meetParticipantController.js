@@ -1,7 +1,7 @@
 const Meet = require("../../models/meet/MeetSchema");
 const MeetParticipant = require("../../models/meet/MeetParticipantSchema");
 const NotificationService = require("../../services/notificationService");
-const Notification = require("../../models/NotificationModel");
+const Notification = require("../../models/NotificationSchema");
 
 const applyToMeet = async (req, res) => {
   try {
@@ -45,12 +45,33 @@ const applyToMeet = async (req, res) => {
     });
 
     // Create notification for meet creator
-    await NotificationService.createMeetApplicationNotification(
-      meet.userId,
-      userId,
-      meetId,
-      meet.title
-    );
+
+    // If join request is not required (direct join), send notifications to both parties
+    if (!meet.joinRequest) {
+      // Send notification to meet creator that someone joined
+      await NotificationService.createMeetJoinedNotification(
+        meet.userId,
+        userId,
+        meetId,
+        meet.title
+      );
+
+      // Send confirmation notification to the person who joined
+      await NotificationService.createMeetJoinConfirmationNotification(
+        meet.userId,
+        userId,
+        meetId,
+        meet.title
+      );
+    } else {
+      // If join request is required, send application notification to meet creator
+      await NotificationService.createMeetApplicationNotification(
+        meet.userId,
+        userId,
+        meetId,
+        meet.title
+      );
+    }
 
     await participant.save();
 
@@ -134,7 +155,7 @@ const updateParticipantStatus = async (req, res) => {
       return res.status(404).json({ error: "Participant not found" });
     }
 
-      const meet = await Meet.findById(meetId);
+    const meet = await Meet.findById(meetId);
 
     // Check if user is meet organizer
     if (participant.meetId.userId.toString() !== userId) {
@@ -145,9 +166,10 @@ const updateParticipantStatus = async (req, res) => {
 
     // Validate status transition
     const validTransitions = {
-      applied: ["approved", "rejected"],
+      applied: ["approved"],
     };
     console.log("participant.meetId", participant);
+    console.log("first", participant.status, status);
 
     if (!validTransitions[participant.status].includes(status)) {
       return res.status(400).json({
@@ -172,42 +194,50 @@ const updateParticipantStatus = async (req, res) => {
     }
 
     if (status === "approved") {
+      // Send notification to the applicant that their application was accepted
+
       await NotificationService.createMeetApplicationAcceptedNotification(
-        participant.meetId.userId,
-        participant.userId._id,
-        participant.meetId._id,
+        meet.userId,
+        participant.userId,
+        participant.meetId,
         meet.title
       );
+
       const notification = await Notification.findOne({
         type: "meet_application",
-        sender: participant.userId._id,
-        recipient: participant.meetId.userId,
+        sender: participant.userId,
+        recipient: meet.userId,
       });
-      console.log("notification", notification);
-      await NotificationService.updateMeetApplicationNotificationStatus(
-        notification._id,
-        status,
-        participant.userId._id,
-        meet.title
-      );
+
+      if (notification) {
+        await NotificationService.updateMeetApplicationNotificationStatus(
+          notification._id,
+          status,
+          participant.userId,
+          meet.title
+        );
+      }
     } else if (status === "rejected") {
       await NotificationService.createMeetApplicationRejectedNotification(
-        participant.meetId.userId,
-        participant.userId._id,
-        participant.meetId._id,
+        meet.userId,
+        participant.userId,
+        participant.meetId,
         meet.title
       );
       const notification = await Notification.findOne({
         type: "meet_application",
-        sender: participant.userId._id,
-        recipient: participant.meetId.userId,
+        sender: participant.userId,
+        recipient: meet.userId,
       });
-      await NotificationService.updateMeetApplicationNotificationStatus(
-        notification._id,
-        status,
-        participant.userId._id,
-        meet.title
-      );
+
+      if (notification) {
+        await NotificationService.updateMeetApplicationNotificationStatus(
+          notification._id,
+          status,
+          participant.userId,
+          meet.title
+        );
+      }
     }
 
     res.json({
@@ -236,6 +266,12 @@ const leaveMeet = async (req, res) => {
     if (!participant) {
       return res.status(404).json({
         message: "You are not an approved participant of this meet",
+      });
+    }
+
+    if (participant.role === "organizer") {
+      return res.status(400).json({
+        message: "You are the organizer of this meet, you cannot leave",
       });
     }
 
@@ -298,7 +334,7 @@ const removeParticipant = async (req, res) => {
       return res.status(404).json({ error: "Participant not found" });
     }
 
-      // Check if user is meet organizer
+    // Check if user is meet organizer
     if (participant.meetId.userId.toString() !== userId) {
       return res
         .status(403)
