@@ -123,8 +123,15 @@ const getProfiles = async (req, res) => {
       minAge,
       maxAge,
       location,
+      filters,
     } = req.query;
     const loggedInUserId = req.user.userId;
+
+    // Get current user's location coordinates for distance-based search
+    const currentUser = await User.findById(loggedInUserId).select(
+      "geoLocation"
+    );
+    const userCoordinates = currentUser?.geoLocation?.coordinates;
 
     // Get the current user's friend IDs (both sent and received)
     const userFriendships = await Friends.find({
@@ -176,22 +183,108 @@ const getProfiles = async (req, res) => {
       query.gender = gender;
     }
 
-    if (minAge || maxAge) {
-      query.dateOfBirth = {};
-      if (minAge) {
-        const maxDate = new Date();
-        maxDate.setFullYear(maxDate.getFullYear() - parseInt(minAge));
-        query.dateOfBirth.$lte = maxDate;
-      }
-      if (maxAge) {
-        const minDate = new Date();
-        minDate.setFullYear(minDate.getFullYear() - parseInt(maxAge));
-        query.dateOfBirth.$gte = minDate;
-      }
-    }
+    // Remove the conflicting age filtering here since we handle it in the filters section
 
     if (location) {
       query.location = { $regex: location, $options: "i" };
+    }
+
+    if (filters) {
+      const {
+        whomYouAreLookingFor,
+        whoWantsToMeet,
+        agedBetween,
+        withinDistance,
+        smokers,
+        interestedIn,
+        ethnicity,
+        onlyShowProfilesOf,
+      } = JSON.parse(filters);
+
+      if (whomYouAreLookingFor && whomYouAreLookingFor.length > 0) {
+        query.lookingFor = { $in: whomYouAreLookingFor };
+      }
+      if (whoWantsToMeet && whoWantsToMeet.length > 0) {
+        query.lookingFor = { $in: whoWantsToMeet };
+      }
+      // Handle age filtering - prioritize agedBetween if provided, otherwise use minAge/maxAge
+      if (agedBetween) {
+        const [minAgeStr, maxAgeStr] = agedBetween.split("-");
+        const minAge = parseInt(minAgeStr);
+        const maxAge = parseInt(maxAgeStr);
+
+        if (!isNaN(minAge) && !isNaN(maxAge)) {
+          // Calculate date range for age filtering using dateOfBirth
+          const maxDate = new Date();
+          maxDate.setFullYear(maxDate.getFullYear() - minAge);
+          const minDate = new Date();
+          minDate.setFullYear(minDate.getFullYear() - maxAge);
+
+          query.dateOfBirth = {
+            $gte: minDate,
+            $lte: maxDate,
+          };
+          console.log("Age filter applied:", {
+            minAge,
+            maxAge,
+            minDate,
+            maxDate,
+          });
+        }
+      } else if (minAge || maxAge) {
+        // Handle individual minAge/maxAge parameters
+        query.dateOfBirth = {};
+        if (minAge && !isNaN(parseInt(minAge))) {
+          const maxDate = new Date();
+          maxDate.setFullYear(maxDate.getFullYear() - parseInt(minAge));
+          query.dateOfBirth.$lte = maxDate;
+          console.log("Min age filter applied:", { minAge, maxDate });
+        }
+        if (maxAge && !isNaN(parseInt(maxAge))) {
+          const minDate = new Date();
+          minDate.setFullYear(minDate.getFullYear() - parseInt(maxAge));
+          query.dateOfBirth.$gte = minDate;
+          console.log("Max age filter applied:", { maxAge, minDate });
+        }
+      }
+      // Only apply distance filtering if explicitly requested
+      if (withinDistance && userCoordinates) {
+        const distanceMiles = parseInt(withinDistance);
+        if (!isNaN(distanceMiles)) {
+          // Convert miles to meters (1 mile = 1609.34 meters)
+          const distanceMeters = Math.round(distanceMiles * 1609.34);
+          query.geoLocation = {
+            $near: {
+              $geometry: { type: "Point", coordinates: userCoordinates },
+              $maxDistance: distanceMeters,
+            },
+          };
+        }
+      }
+      if (smokers) {
+        query.smoker = smokers === "smoker" ? true : false;
+      }
+      if (interestedIn && interestedIn.length > 0) {
+        if (interestedIn.includes("Any")) {
+          query.winkInterests = { $exists: true };
+        } else {
+          query.winkInterests = { $in: interestedIn };
+        }
+      }
+      if (ethnicity) {
+        query.ethnicity = ethnicity;
+      }
+      if (onlyShowProfilesOf === "verified") {
+        query.isVerified = true;
+      } else if (onlyShowProfilesOf === "accommodate") {
+        query.openToAccommodate = true;
+      } else if (onlyShowProfilesOf === "travel") {
+        query.openToTravel = true;
+      } else if (onlyShowProfilesOf === "new") {
+        query.createdAt = {
+          $gte: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5),
+        };
+      }
     }
 
     const profiles = await User.find(query)

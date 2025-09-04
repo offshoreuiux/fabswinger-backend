@@ -4,6 +4,12 @@ const Message = require("../models/chats/MessageSchema");
 const Friend = require("../models/FriendRequestSchema");
 const Chat = require("../models/chats/ChatSchema");
 const PostLike = require("../models/forum/PostLikeSchema");
+const {
+  likePost,
+  unlikePost,
+  winkPost,
+  unwinkPost,
+} = require("../controllers/postController");
 
 let io;
 let onlineUsers = new Map(); // In-memory tracking for better performance
@@ -236,9 +242,7 @@ function initSocket(server) {
         }
         pendingLikeUpdates.get(postId).add(likeKey);
 
-        console.log(
-          `Like action queued: ${postId} by user ${userId}, state: ${state}`
-        );
+        console.log(`Like action queued: ${postId} by user ${userId}`);
 
         // Remove from pending after 2 seconds (simulating processing time)
         setTimeout(() => {
@@ -247,6 +251,46 @@ function initSocket(server) {
         }, 2000);
       } catch (error) {
         console.error("Error handling forum like toggle:", error);
+      }
+    });
+
+    socket.on("like-post", async ({ postId, userId }) => {
+      try {
+        console.log("Like post received:", { postId, userId });
+        await likePost({ postId, userId, io });
+      } catch (error) {
+        console.error("Error handling like post:", error);
+      }
+    });
+
+    socket.on("unlike-post", async ({ postId, userId }) => {
+      try {
+        console.log("Unlike post received:", { postId, userId });
+        await unlikePost({ postId, userId, io });
+      } catch (error) {
+        console.error("Error handling unlike post:", error);
+      }
+    });
+
+    socket.on("wink-post", async ({ postId, userId }) => {
+      try {
+        console.log("Wink post received:", { postId, userId });
+        await winkPost({ postId, userId, io });
+      } catch (error) {
+        console.error("Error handling wink post:", error);
+      } finally {
+        io.emit("wink-post", { postId, userId });
+      }
+    });
+
+    socket.on("unwink-post", async ({ postId, userId }) => {
+      try {
+        console.log("Unwink post received:", { postId, userId });
+        await unwinkPost({ postId, userId, io });
+      } catch (error) {
+        console.error("Error handling unwink post:", error);
+      } finally {
+        io.emit("unwink-post", { postId, userId });
       }
     });
 

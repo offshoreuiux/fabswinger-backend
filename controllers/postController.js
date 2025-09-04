@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const NotificationService = require("../services/notificationService");
 const User = require("../models/UserSchema");
 const Friends = require("../models/FriendRequestSchema");
+const { getIO } = require("../utils/socket");
 
 const createPost = async (req, res) => {
   try {
@@ -630,21 +631,20 @@ const deletePost = async (req, res) => {
   }
 };
 
-const likePost = async (req, res) => {
+const likePost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
+    console.log("postId", postId);
+    console.log("userId", userId);
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Check if user already liked the post
     const existingLike = await PostLike.findOne({ postId, userId });
     if (existingLike) {
-      return res.status(400).json({ error: "Post already liked" });
+      return { error: "Post already liked" };
     }
 
     // Create new like
@@ -666,7 +666,14 @@ const likePost = async (req, res) => {
     }
 
     // Emit socket event for real-time updates
-    const io = req.app.get("io");
+    // Use provided socketIo or fallback to getIO()
+    let io;
+    try {
+      io = socketIo || getIO();
+    } catch (error) {
+      console.warn("Socket not available for likePost:", error.message);
+    }
+
     if (io) {
       io.emit("post-liked", {
         postId,
@@ -676,40 +683,44 @@ const likePost = async (req, res) => {
       });
     }
 
-    res.status(201).json({
+    return {
       message: "Post liked successfully",
       like,
       likeCount,
       isLiked: true,
-    });
+    };
   } catch (error) {
     console.error("Error in likePost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 
-const unlikePost = async (req, res) => {
+const unlikePost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Remove like
     const deletedLike = await PostLike.findOneAndDelete({ postId, userId });
     if (!deletedLike) {
-      return res.status(400).json({ error: "Post not liked" });
+      return { error: "Post not liked" };
     }
 
     // Get updated like count
     const likeCount = await PostLike.countDocuments({ postId });
 
     // Emit socket event for real-time updates
-    const io = req.app.get("io");
+    // Use provided socketIo or fallback to getIO()
+    let io;
+    try {
+      io = socketIo || getIO();
+    } catch (error) {
+      console.warn("Socket not available for unlikePost:", error.message);
+    }
+
     if (io) {
       io.emit("post-unliked", {
         postId,
@@ -719,42 +730,39 @@ const unlikePost = async (req, res) => {
       });
     }
 
-    res.json({
+    return {
       message: "Post unliked successfully",
       likeCount,
       isLiked: false,
-    });
+    };
   } catch (error) {
     console.error("Error in unlikePost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 
-const winkPost = async (req, res) => {
+const winkPost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Check if user already liked the post
     const existingWink = await PostWink.findOne({ postId, userId });
     if (existingWink) {
-      return res.status(400).json({ error: "Post already winked" });
+      return { error: "Post already winked" };
     }
 
     // Create new like
     const wink = await PostWink.create({ postId, userId });
+    console.log("wink", wink);
 
     // Get updated like count
     const winkCount = await PostWink.countDocuments({ postId });
 
     // Emit socket event for real-time updates
-    // const io = req.app.get("io");
     // if (io) {
     //   io.emit("post-winked", {
     //     postId,
@@ -764,40 +772,37 @@ const winkPost = async (req, res) => {
     //   });
     // }
 
-    res.status(201).json({
+    return {
       message: "Post winked successfully",
       wink,
       winkCount,
       isWinked: true,
-    });
+    };
   } catch (error) {
     console.error("Error in winkPost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 
-const unwinkPost = async (req, res) => {
+const unwinkPost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Remove like
     const deletedWink = await PostWink.findOneAndDelete({ postId, userId });
     if (!deletedWink) {
-      return res.status(400).json({ error: "Post not winked" });
+      return { error: "Post not winked" };
     }
 
     // Get updated like count
     const winkCount = await PostWink.countDocuments({ postId });
 
     // Emit socket event for real-time updates
-    // const io = req.app.get("io");
+    // const io = getIO();
     // if (io) {
     //   io.emit("post-unwinked", {
     //     postId,
@@ -807,14 +812,14 @@ const unwinkPost = async (req, res) => {
     //   });
     // }
 
-    res.json({
+    return {
       message: "Post unwinked successfully",
       winkCount,
       isWinked: false,
-    });
+    };
   } catch (error) {
     console.error("Error in unwinkPost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 

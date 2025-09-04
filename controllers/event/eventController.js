@@ -1,6 +1,8 @@
 const Event = require("../../models/event/EventSchema");
 const EventHotlist = require("../../models/hotlist/EventHotlistSchema");
 const EventParticipant = require("../../models/event/EventParticipantSchema");
+const User = require("../../models/UserSchema");
+const Friends = require("../../models/FriendRequestSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");
 const s3 = require("../../utils/s3");
@@ -170,6 +172,8 @@ const createEvent = async (req, res) => {
 
     // Geocode location to get coordinates
     let coordinates = null;
+    let state = "";
+    let country = "";
     try {
       const geocodeResponse = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
@@ -187,6 +191,8 @@ const createEvent = async (req, res) => {
             parseFloat(geocodeData[0].lat),
           ],
         };
+        state = geocodeData[0].state;
+        country = geocodeData[0].country;
       }
     } catch (geocodeError) {
       console.log("Geocoding failed:", geocodeError.message);
@@ -199,6 +205,8 @@ const createEvent = async (req, res) => {
       date,
       time,
       location,
+      state,
+      country,
       coordinates,
       image: imageUrl,
       eventType,
@@ -238,6 +246,8 @@ const getEvents = async (req, res) => {
       longitude,
       limit = 10,
       maxDistance = 50,
+      search = "",
+      filter = {},
     } = req.query;
 
     const userId = req.user.userId; // Get current user ID
@@ -300,12 +310,119 @@ const getEvents = async (req, res) => {
 
       default: // 'all'
         // Get all events
-        events = await Event.find().limit(parseInt(limit));
+
+        let filterQuery = {};
+        const { region, type, distance, discover, sort } = JSON.parse(filter);
+
+        if (region) filterQuery.region = region;
+        if (type) filterQuery.eventType = type;
+        if (distance && distance !== "all") {
+          const currentUser = await User.findById(userId).select("geoLocation");
+          const userCoordinates = currentUser?.geoLocation?.coordinates;
+
+          if (userCoordinates) {
+            let maxDistance = 0;
+            if (distance === "25") maxDistance = 25;
+            else if (distance === "50") maxDistance = 50;
+            else if (distance === "75") maxDistance = 75;
+            else if (distance === "100") maxDistance = 100;
+            else if (distance === "150") maxDistance = 150;
+
+            if (maxDistance > 0) {
+              const distanceMeters = Math.round(maxDistance * 1609.34);
+              filterQuery.coordinates = {
+                $geoWithin: {
+                  $centerSphere: [userCoordinates, distanceMeters / 6378137],
+                },
+              };
+            }
+          }
+        }
+        if (discover && discover !== "discover"){
+          
+        }
+        if (sort) filterQuery.sort = sort;
+
+        events = await Event.find({
+          title: { $regex: search, $options: "i" },
+          ...filterQuery,
+        })
+          .sort({ date: 1 })
+          .limit(parseInt(limit));
         break;
     }
 
-    // Add hotlist information to events
-    const eventsWithHotlistInfo = await addHotlistInfoToEvents(events, userId);
+    // Filter events based on visibility rules
+    console.log("events before filtering", events);
+
+    // Get user's verification status and friends list
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isUserVerified = user.verified || false;
+    let userFriends = [];
+
+    // Get user's friends list for friend-only events
+    const userFriendships = await Friends.find({
+      $or: [
+        { sender: userId, status: "accepted" },
+        { receiver: userId, status: "accepted" },
+      ],
+    });
+
+    // Extract friend IDs (excluding the current user)
+    userFriends = userFriendships.map((friendship) => {
+      if (friendship.sender.toString() === userId.toString()) {
+        return friendship.receiver.toString();
+      } else {
+        return friendship.sender.toString();
+      }
+    });
+
+    // Filter events based on visibility rules
+    const filteredEvents = events.filter((event) => {
+      // If rsvpEveryone is true, show to everyone
+      if (event.rsvpEveryone) {
+        console.log(`Event ${event.title} visible to everyone`);
+        return true;
+      }
+
+      // If user is the creator, always show the event
+      if (event.userId.toString() === userId.toString()) {
+        console.log(`Event ${event.title} visible to creator`);
+        return true;
+      }
+
+      // If rsvpFriends is true, only show to creator's friends
+      if (event.rsvpFriends) {
+        const isFriend = userFriends.includes(event.userId.toString());
+        console.log(
+          `Event ${event.title} friend-only, user is friend: ${isFriend}`
+        );
+        return isFriend;
+      }
+
+      // If rsvpVerified is true, only show to verified users
+      if (event.rsvpVerified) {
+        console.log(
+          `Event ${event.title} verified-only, user verified: ${isUserVerified}`
+        );
+        return isUserVerified;
+      }
+
+      // Default: only show to creator (already handled above)
+      console.log(`Event ${event.title} not visible to user`);
+      return false;
+    });
+
+    console.log("filtered events", filteredEvents);
+
+    const eventsWithHotlistInfo = await addHotlistInfoToEvents(
+      filteredEvents,
+      userId
+    );
     const eventsWithParticipantDetails = await addParticipantDetailsToEvents(
       eventsWithHotlistInfo,
       userId
@@ -336,7 +453,6 @@ const updateEvent = async (req, res) => {
       rsvpVerified,
       rsvpEveryone,
       joinRequest,
-      coordinates,
       image: img,
       ageRange: ageRangeStr,
       eventRules,
@@ -375,6 +491,28 @@ const updateEvent = async (req, res) => {
     } catch (error) {
       return res.status(400).json({ message: "Invalid age range format" });
     }
+    let state = "";
+    let country = "";
+    let coordinates = null;
+    try {
+      const geocodeResponse = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          location
+        )}&limit=1`
+      );
+      const geocodeData = await geocodeResponse.json();
+      coordinates = {
+        type: "Point",
+        coordinates: [
+          parseFloat(geocodeData[0].lon),
+          parseFloat(geocodeData[0].lat),
+        ],
+      };
+      state = geocodeData[0].state;
+      country = geocodeData[0].country;
+    } catch (geocodeError) {
+      console.log("Geocoding failed:", geocodeError.message);
+    }
     const event = await Event.findByIdAndUpdate(
       id,
       {
@@ -383,6 +521,8 @@ const updateEvent = async (req, res) => {
         date,
         time,
         location,
+        state,
+        country,
         coordinates,
         image: typeof img === "string" ? img : imageUrl,
         eventType,
@@ -583,6 +723,154 @@ const getEventsByUser = async (req, res) => {
   }
 };
 
+const getEventsByDistance = async (req, res) => {
+  try {
+    const { distance, latitude, longitude, page = 1, limit = 20 } = req.query;
+    const userId = req.user.userId;
+
+    if (!distance || !latitude || !longitude) {
+      return res.status(400).json({
+        message: "Distance (in miles), latitude, and longitude are required",
+      });
+    }
+
+    const distanceInMiles = parseFloat(distance);
+    const userLat = parseFloat(latitude);
+    const userLon = parseFloat(longitude);
+
+    if (isNaN(distanceInMiles) || isNaN(userLat) || isNaN(userLon)) {
+      return res.status(400).json({
+        message: "Invalid distance, latitude, or longitude values",
+      });
+    }
+
+    if (distanceInMiles <= 0) {
+      return res.status(400).json({
+        message: "Distance must be greater than 0",
+      });
+    }
+
+    // Convert miles to radians (Earth's radius is approximately 3959 miles)
+    const distanceInRadians = distanceInMiles / 3959;
+
+    const skip = (page - 1) * limit;
+
+    // Use aggregation to get events within distance with proper distance calculation
+    const events = await Event.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [userLon, userLat],
+          },
+          distanceField: "distanceInMiles",
+          spherical: true,
+          key: "coordinates",
+          maxDistance: distanceInRadians,
+          query: {
+            coordinates: { $exists: true, $ne: null },
+          },
+        },
+      },
+      {
+        $addFields: {
+          // Convert distance from radians to miles for display
+          distanceInMiles: {
+            $round: [{ $multiply: ["$distanceInMiles", 3959] }, 2],
+          },
+        },
+      },
+      { $skip: skip },
+      { $limit: parseInt(limit) },
+    ]);
+
+    // Get total count for pagination
+    const totalCount = await Event.countDocuments({
+      coordinates: {
+        $geoWithin: {
+          $centerSphere: [[userLon, userLat], distanceInRadians],
+        },
+      },
+    });
+
+    // Add hotlist and participant information
+    const eventsWithDetails = await addHotlistInfoToEvents(events, userId);
+    const eventsWithParticipants = await addParticipantDetailsToEvents(
+      eventsWithDetails,
+      userId
+    );
+
+    // Filter events based on visibility rules
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isUserVerified = user.verified || false;
+    let userFriends = [];
+
+    // Get user's friends list for friend-only events
+    const userFriendships = await Friends.find({
+      $or: [
+        { sender: userId, status: "accepted" },
+        { receiver: userId, status: "accepted" },
+      ],
+    });
+
+    // Extract friend IDs (excluding the current user)
+    userFriends = userFriendships.map((friendship) => {
+      if (friendship.sender.toString() === userId.toString()) {
+        return friendship.receiver.toString();
+      } else {
+        return friendship.sender.toString();
+      }
+    });
+
+    // Filter events based on visibility rules
+    const filteredEvents = eventsWithParticipants.filter((event) => {
+      // If rsvpEveryone is true, show to everyone
+      if (event.rsvpEveryone) {
+        return true;
+      }
+
+      // If user is the creator, always show the event
+      if (event.userId.toString() === userId.toString()) {
+        return true;
+      }
+
+      // If rsvpFriends is true, only show to creator's friends
+      if (event.rsvpFriends) {
+        const isFriend = userFriends.includes(event.userId.toString());
+        return isFriend;
+      }
+
+      // If rsvpVerified is true, only show to verified users
+      if (event.rsvpVerified) {
+        return isUserVerified;
+      }
+
+      // Default: show to everyone
+      return true;
+    });
+
+    res.status(200).json({
+      events: filteredEvents,
+      total: totalCount,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(totalCount / limit),
+      searchRadius: distanceInMiles,
+      userLocation: { latitude: userLat, longitude: userLon },
+    });
+  } catch (error) {
+    console.error("Error getting events by distance:", error);
+    res.status(500).json({
+      message: "Failed to get events by distance",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createEvent,
   getEvents,
@@ -590,4 +878,5 @@ module.exports = {
   getEventById,
   updateEventRules,
   getEventsByUser,
+  getEventsByDistance,
 };
