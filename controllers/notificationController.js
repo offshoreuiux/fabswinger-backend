@@ -8,12 +8,13 @@ const {
 const getUserNotifications = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { page = 1, limit = 20 } = req.query;
+    const { page = 1, limit = 20, filter } = req.query;
 
     const result = await NotificationService.getUserNotifications(
       userId,
       parseInt(page),
-      parseInt(limit)
+      parseInt(limit),
+      filter
     );
 
     // Automatically mark fetched notifications as read
@@ -153,10 +154,25 @@ const getUnreadCount = async (req, res) => {
   }
 };
 
+// Get notification filter counts
+const getFilterCounts = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const counts = await NotificationService.getFilterCounts(userId);
+
+    res.json({ filterCounts: counts });
+  } catch (error) {
+    console.error("Error getting filter counts:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 module.exports = {
   getUserNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
   deleteNotification,
   getUnreadCount,
+  getFilterCounts,
 };

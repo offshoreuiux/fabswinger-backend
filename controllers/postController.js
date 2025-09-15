@@ -1,11 +1,14 @@
-const Post = require("../models/post/PostModel");
-const PostLike = require("../models/post/PostLikeModel");
-const PostWink = require("../models/post/PostWinkModel");
-const PostHotlist = require("../models/post/PostHotlistModel");
+const Post = require("../models/post/PostSchema");
+const PostLike = require("../models/post/PostLikeSchema");
+const PostWink = require("../models/post/PostWinkSchema");
+const PostHotlist = require("../models/post/PostHotlistSchema");
 const { v4: uuidv4 } = require("uuid");
 const s3 = require("../utils/s3");
 const mongoose = require("mongoose");
 const NotificationService = require("../services/notificationService");
+const User = require("../models/UserSchema");
+const Friends = require("../models/FriendRequestSchema");
+const { getIO } = require("../utils/socket");
 
 const createPost = async (req, res) => {
   try {
@@ -299,79 +302,125 @@ const getPosts = async (req, res) => {
       latitude,
       longitude,
       radius = 10,
-      lastPostId,
       limit = 20,
+      tab,
+      page = 1,
     } = req.query;
     const currentUserId = req.user.userId;
     const currentUserIdObj = new mongoose.Types.ObjectId(currentUserId);
 
+    const skip = (page - 1) * limit;
+
     // First, get the current user's friends list
-    const currentUser = await require("../models/UserModel").findById(
-      currentUserId
-    );
-    const userFriends = currentUser?.friends || [];
-    const userFriendsObjIds = userFriends.map((friendId) =>
-      typeof friendId === "string"
-        ? new mongoose.Types.ObjectId(friendId)
-        : friendId
-    );
+    const currentUser = await User.findById(currentUserId);
+    const userFriends = await Friends.find({
+      $or: [{ sender: currentUserIdObj }, { receiver: currentUserIdObj }],
+      status: "accepted",
+    });
+    const userFriendsObjIds = userFriends.map((friend) => {
+      // Convert both to strings for comparison
+      const receiverStr = friend?.receiver?.toString();
+      const senderStr = friend?.sender?.toString();
+      const currentUserIdStr = currentUserIdObj.toString();
+
+      // Return the other user's ID (not the current user's ID)
+      return receiverStr === currentUserIdStr
+        ? friend?.sender
+        : friend?.receiver;
+    });
 
     let query = {};
 
-    // If filtering by a specific user
-    if (userId) {
-      query.userId = userId;
+    // Handle different tabs first
+    if (tab === "hotlists") {
+      // For hotlists tab, get posts that the current user has hotlisted
+      const userHotlistedPosts = await PostHotlist.find({
+        userId: currentUserIdObj,
+      })
+        .select("postId")
+        .lean();
 
-      if (privacy === "private") {
-        // Allow private posts if currentUserId === userId OR if current user is friends with the post owner
-        if (
-          currentUserId === userId ||
-          userFriendsObjIds.some((friendId) => friendId.toString() === userId)
-        ) {
-          query.privacy = "private";
-        } else {
-          return res
-            .status(403)
-            .json({ error: "Unauthorized to view private posts of this user" });
-        }
-      } else if (privacy === "public") {
-        query.privacy = "public";
-      } else {
-        // No privacy param — return public posts + private posts if user is owner or friend
-        if (
-          currentUserId === userId ||
-          userFriendsObjIds.some((friendId) => friendId.toString() === userId)
-        ) {
-          query.privacy = { $in: ["public", "private"] };
-        } else {
-          query.privacy = "public";
-        }
+      if (userHotlistedPosts.length === 0) {
+        // If user has no hotlisted posts, return empty array
+        console.log("User has no hotlisted posts, returning empty posts array");
+        return res.json({ posts: [], hasMore: false });
       }
+
+      const hotlistedPostIds = userHotlistedPosts.map((hp) => hp.postId);
+      query._id = { $in: hotlistedPostIds };
+
+      // For hotlisted posts, we want to show them regardless of privacy settings
+      // since the user has explicitly saved them
+      query.privacy = { $in: ["public", "private"] };
+    } else if (tab === "friends") {
+      // For friends tab, only show posts from friends (both public and private)
+      if (userFriendsObjIds.length === 0) {
+        // If user has no friends, return empty array
+        console.log("User has no friends, returning empty posts array");
+        return res.json({ posts: [], hasMore: false });
+      }
+
+      query = {
+        userId: { $in: userFriendsObjIds },
+        privacy: { $in: ["public", "private"] },
+      };
     } else {
-      // No userId filter — return public + current user's private posts + friends' private posts
-      if (privacy === "private") {
-        query = {
-          $or: [
-            { userId: currentUserIdObj, privacy: "private" },
-            {
-              userId: { $in: userFriendsObjIds },
-              privacy: "private",
-            },
-          ],
-        };
-      } else if (privacy === "public") {
-        query = { privacy: "public" };
+      // Default behavior for "All" tab or no tab specified
+      // If filtering by a specific user
+      if (userId) {
+        query.userId = userId;
+
+        if (privacy === "private") {
+          // Allow private posts if currentUserId === userId OR if current user is friends with the post owner
+          if (
+            currentUserId === userId ||
+            userFriendsObjIds.some((friendId) => friendId.toString() === userId)
+          ) {
+            query.privacy = "private";
+          } else {
+            return res.status(403).json({
+              error: "Unauthorized to view private posts of this user",
+            });
+          }
+        } else if (privacy === "public") {
+          query.privacy = "public";
+        } else {
+          // No privacy param — return public posts + private posts if user is owner or friend
+          if (
+            currentUserId === userId ||
+            userFriendsObjIds.some((friendId) => friendId.toString() === userId)
+          ) {
+            query.privacy = { $in: ["public", "private"] };
+          } else {
+            query.privacy = "public";
+          }
+        }
       } else {
-        query = {
-          $or: [
-            { privacy: "public" },
-            { userId: currentUserIdObj, privacy: "private" },
-            {
-              userId: { $in: userFriendsObjIds },
-              privacy: "private",
-            },
-          ],
-        };
+        // No userId filter — return public + current user's private posts + friends' private posts
+        if (privacy === "private") {
+          query = {
+            $or: [
+              { userId: currentUserIdObj, privacy: "private" },
+              {
+                userId: { $in: userFriendsObjIds },
+                privacy: "private",
+              },
+            ],
+          };
+        } else if (privacy === "public") {
+          query = { privacy: "public" };
+        } else {
+          query = {
+            $or: [
+              { privacy: "public" },
+              { userId: currentUserIdObj, privacy: "private" },
+              {
+                userId: { $in: userFriendsObjIds },
+                privacy: "private",
+              },
+            ],
+          };
+        }
       }
     }
 
@@ -396,16 +445,11 @@ const getPosts = async (req, res) => {
       }
     }
 
-    if (lastPostId && mongoose.Types.ObjectId.isValid(lastPostId)) {
-      query._id = { $lt: new mongoose.Types.ObjectId(lastPostId) };
-    }
-
     // Build aggregation pipeline
     let pipeline = [];
 
     // If we have location filter, start with $geoNear
     if (hasLocationFilter) {
-      console.log("hasLocationFilter=======", hasLocationFilter);
       pipeline.push({
         $geoNear: {
           near: {
@@ -541,14 +585,18 @@ const getPosts = async (req, res) => {
         },
       },
       { $sort: { createdAt: -1 } },
+      { $skip: parseInt(skip) },
       { $limit: parseInt(limit) }
     );
 
     // Use aggregation to get posts with like count and user like status
     const posts = await Post.aggregate(pipeline);
-    console.log("posts", posts);
+    console.log(`Retrieved ${posts.length} posts for tab: ${tab || "All"}`);
 
-    res.json(posts);
+    // Calculate hasMore by checking if we got the full limit
+    const hasMore = posts.length === parseInt(limit);
+
+    res.status(200).json({ posts, hasMore });
   } catch (error) {
     console.error("Error in getPosts:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -585,21 +633,20 @@ const deletePost = async (req, res) => {
   }
 };
 
-const likePost = async (req, res) => {
+const likePost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
+    console.log("postId", postId);
+    console.log("userId", userId);
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Check if user already liked the post
     const existingLike = await PostLike.findOne({ postId, userId });
     if (existingLike) {
-      return res.status(400).json({ error: "Post already liked" });
+      return { error: "Post already liked" };
     }
 
     // Create new like
@@ -621,7 +668,14 @@ const likePost = async (req, res) => {
     }
 
     // Emit socket event for real-time updates
-    const io = req.app.get("io");
+    // Use provided socketIo or fallback to getIO()
+    let io;
+    try {
+      io = socketIo || getIO();
+    } catch (error) {
+      console.warn("Socket not available for likePost:", error.message);
+    }
+
     if (io) {
       io.emit("post-liked", {
         postId,
@@ -631,40 +685,44 @@ const likePost = async (req, res) => {
       });
     }
 
-    res.status(201).json({
+    return {
       message: "Post liked successfully",
       like,
       likeCount,
       isLiked: true,
-    });
+    };
   } catch (error) {
     console.error("Error in likePost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 
-const unlikePost = async (req, res) => {
+const unlikePost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Remove like
     const deletedLike = await PostLike.findOneAndDelete({ postId, userId });
     if (!deletedLike) {
-      return res.status(400).json({ error: "Post not liked" });
+      return { error: "Post not liked" };
     }
 
     // Get updated like count
     const likeCount = await PostLike.countDocuments({ postId });
 
     // Emit socket event for real-time updates
-    const io = req.app.get("io");
+    // Use provided socketIo or fallback to getIO()
+    let io;
+    try {
+      io = socketIo || getIO();
+    } catch (error) {
+      console.warn("Socket not available for unlikePost:", error.message);
+    }
+
     if (io) {
       io.emit("post-unliked", {
         postId,
@@ -674,42 +732,39 @@ const unlikePost = async (req, res) => {
       });
     }
 
-    res.json({
+    return {
       message: "Post unliked successfully",
       likeCount,
       isLiked: false,
-    });
+    };
   } catch (error) {
     console.error("Error in unlikePost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 
-const winkPost = async (req, res) => {
+const winkPost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Check if user already liked the post
     const existingWink = await PostWink.findOne({ postId, userId });
     if (existingWink) {
-      return res.status(400).json({ error: "Post already winked" });
+      return { error: "Post already winked" };
     }
 
     // Create new like
     const wink = await PostWink.create({ postId, userId });
+    console.log("wink", wink);
 
     // Get updated like count
     const winkCount = await PostWink.countDocuments({ postId });
 
     // Emit socket event for real-time updates
-    // const io = req.app.get("io");
     // if (io) {
     //   io.emit("post-winked", {
     //     postId,
@@ -719,40 +774,37 @@ const winkPost = async (req, res) => {
     //   });
     // }
 
-    res.status(201).json({
+    return {
       message: "Post winked successfully",
       wink,
       winkCount,
       isWinked: true,
-    });
+    };
   } catch (error) {
     console.error("Error in winkPost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 
-const unwinkPost = async (req, res) => {
+const unwinkPost = async ({ postId, userId, io: socketIo }) => {
   try {
-    const { postId } = req.params;
-    const userId = req.user.userId;
-
     // Check if post exists
     const post = await Post.findById(postId);
     if (!post) {
-      return res.status(404).json({ error: "Post not found" });
+      return { error: "Post not found" };
     }
 
     // Remove like
     const deletedWink = await PostWink.findOneAndDelete({ postId, userId });
     if (!deletedWink) {
-      return res.status(400).json({ error: "Post not winked" });
+      return { error: "Post not winked" };
     }
 
     // Get updated like count
     const winkCount = await PostWink.countDocuments({ postId });
 
     // Emit socket event for real-time updates
-    // const io = req.app.get("io");
+    // const io = getIO();
     // if (io) {
     //   io.emit("post-unwinked", {
     //     postId,
@@ -762,14 +814,14 @@ const unwinkPost = async (req, res) => {
     //   });
     // }
 
-    res.json({
+    return {
       message: "Post unwinked successfully",
       winkCount,
       isWinked: false,
-    });
+    };
   } catch (error) {
     console.error("Error in unwinkPost:", error);
-    res.status(500).json({ error: "Internal server error" });
+    return { error: "Internal server error" };
   }
 };
 

@@ -22,7 +22,6 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false, // Prevent accidental exposure
     },
-
     // Profile completion
     profileCompleted: {
       type: Boolean,
@@ -167,14 +166,6 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    lastActive: {
-      type: Date,
-      default: Date.now,
-    },
     keepSignedIn: {
       type: Boolean,
       default: false,
@@ -183,11 +174,41 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    lastActive: {
+      type: Date,
+      default: Date.now,
+    },
     // Online status (for real-time systems)
     isOnline: {
       type: Boolean,
       default: false,
+    },
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    settings: {
+      type: Object,
+      default: {
+        getPrivateMessages: true,
+        getWinks: true,
+        getFriendInvites: true,
+        newMembersMatchMyRequirements: true,
+        profileVisibility: true,
+        whosLookedAtMe: true,
+        friendsListVisibility: true,
+        photoFabFeature: true,
+        nonMemberVisibility: true,
+        chatCameraVisibility: true,
+      },
     },
   },
   {

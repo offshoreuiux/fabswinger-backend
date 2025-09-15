@@ -36,6 +36,13 @@ const postSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+postSchema.virtual("isHotlisted", {
+  ref: "Hotlist",
+  localField: "_id",
+  foreignField: "postId",
+  justOne: true,
+});
+
 postSchema.index({ location: "2dsphere" });
 postSchema.index({ privacy: 1 });
 postSchema.index({ userId: 1, privacy: 1 });

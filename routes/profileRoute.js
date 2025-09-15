@@ -5,15 +5,19 @@ const {
   updateProfile,
   getProfile,
   getProfileById,
+  getPublicProfileById,
   updateProfileImage,
   deleteProfileImage,
   updatePassword,
   getProfiles,
   updateLocation,
+  updateProfileSettings,
 } = require("../controllers/profileController");
 const upload = require("../middleware/upload");
 
 // All profile routes require authentication
+router.get("/public/:id", getPublicProfileById);
+
 router.use(authenticateToken);
 
 // Get current user's profile
@@ -37,5 +41,7 @@ router.put("/avatar", upload.single("avatar"), updateProfileImage);
 
 // Delete profile image
 router.delete("/avatar", deleteProfileImage);
+
+router.put("/settings", updateProfileSettings);
 
 module.exports = router;
