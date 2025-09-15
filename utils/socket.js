@@ -10,6 +10,8 @@ const {
   winkPost,
   unwinkPost,
 } = require("../controllers/postController");
+const { winkProfile } = require("../controllers/profileController");
+const NotificationService = require("../services/notificationService");
 
 let io;
 let onlineUsers = new Map(); // In-memory tracking for better performance
@@ -72,13 +74,13 @@ function initSocket(server) {
     // Handle sending messages via socket
     socket.on("send-message", async (data) => {
       try {
-        const { chatId, senderId, receiverId, content, type } = data;
+        const { chatId, senderId, receiverId, content, type, tempId } = data;
 
         // Validate required fields
-        if (!senderId || !receiverId || !content || !type) {
+        if (!senderId || !content || !type) {
           socket.emit("message-error", {
             message:
-              "Missing required fields: senderId, receiverId, content, and type are required",
+              "Missing required fields: senderId, content, and type are required",
           });
           return;
         }
@@ -101,72 +103,150 @@ function initSocket(server) {
           return;
         }
 
-        // Verify friendship
-        const isFriend = await Friend.findOne({
-          $or: [
-            { sender: senderId, receiver: receiverId },
-            { sender: receiverId, receiver: senderId },
-          ],
-          status: "accepted",
-        });
+        // Get chat to determine type and validate permissions
+        let chat;
+        if (chatId) {
+          chat = await Chat.findById(chatId);
+          if (!chat) {
+            socket.emit("message-error", {
+              message: "Chat not found",
+            });
+            return;
+          }
 
-        if (!isFriend) {
-          socket.emit("message-error", {
-            message: "Cannot send message: Users are not friends",
+          // Check if sender is a member of the chat
+          if (!chat.members.includes(senderId)) {
+            socket.emit("message-error", {
+              message: "You are not a member of this chat",
+            });
+            return;
+          }
+        } else {
+          // For private chats without chatId, verify friendship
+          if (!receiverId) {
+            socket.emit("message-error", {
+              message: "receiverId is required for private chats",
+            });
+            return;
+          }
+
+          const isFriend = await Friend.findOne({
+            $or: [
+              { sender: senderId, receiver: receiverId },
+              { sender: receiverId, receiver: senderId },
+            ],
+            status: "accepted",
           });
-          return;
+
+          if (!isFriend) {
+            socket.emit("message-error", {
+              message: "Cannot send message: Users are not friends",
+            });
+            return;
+          }
         }
 
         let finalChatId = chatId;
 
-        // Create chat if it doesn't exist
+        // Create chat if it doesn't exist (only for private chats)
         if (!chatId) {
           const existingChat = await Chat.findOne({
             members: { $all: [senderId, receiverId] },
+            type: "private",
           });
 
           if (!existingChat) {
             const newChat = await Chat.create({
               members: [senderId, receiverId],
+              type: "private",
             });
             finalChatId = newChat._id;
-            console.log(`New chat created: ${finalChatId}`);
+            console.log(`New private chat created: ${finalChatId}`);
           } else {
             finalChatId = existingChat._id;
           }
         }
 
         // Create the message
-        const newMessage = await Message.create({
+        const messageData = {
           chatId: finalChatId,
           sender: senderId,
-          receiver: receiverId,
           content: content.trim(),
           type,
-        });
+        };
 
-        await newMessage.populate("sender receiver", "username profileImage");
+        // Only add receiver for private chats
+        if (chat?.type === "private" || (!chat && receiverId)) {
+          messageData.receiver = receiverId;
+        }
 
-        // Update chat with last message info
-        await Chat.findByIdAndUpdate(finalChatId, {
+        const newMessage = await Message.create(messageData);
+
+        // Populate sender and receiver (if exists)
+        const populateFields = ["sender"];
+        if (messageData.receiver) {
+          populateFields.push("receiver");
+        }
+        await newMessage.populate(
+          populateFields.join(" "),
+          "username profileImage"
+        );
+
+        // Get chat members for unread count update
+        const chatForUpdate = chat || (await Chat.findById(finalChatId));
+        const chatMembers = chatForUpdate.members.filter(
+          (memberId) => memberId.toString() !== senderId
+        );
+
+        // Update chat with last message info and unread counts
+        const updateData = {
           $set: {
             lastMessage: newMessage._id,
             lastMessageTime: new Date(),
           },
-          $inc: {
-            [`unreadCount.${receiverId}`]: 1,
-          },
+        };
+
+        // Increment unread count for all members except sender
+        chatMembers.forEach((memberId) => {
+          updateData.$inc = updateData.$inc || {};
+          updateData.$inc[`unreadCount.${memberId}`] = 1;
         });
+
+        await Chat.findByIdAndUpdate(finalChatId, updateData);
+
+        // Send notifications to all members except sender
+        for (const memberId of chatMembers) {
+          const user = await User.findById(memberId);
+          if (user?.settings?.getPrivateMessages) {
+            try {
+              await NotificationService.createPrivateMessageNotification(
+                senderId,
+                memberId,
+                finalChatId,
+                content
+              );
+            } catch (notificationError) {
+              console.error(
+                "Error creating message notification:",
+                notificationError
+              );
+            }
+          }
+        }
 
         // Emit to sender for confirmation
         socket.emit("message-sent", {
           success: true,
           message: newMessage,
           chatId: finalChatId,
+          tempId,
         });
+        console.log("message-sent", newMessage);
 
-        // Emit to receiver
-        io.to(`user-${receiverId}`).emit("new-message", newMessage);
+        // Emit to all chat members except sender
+        chatMembers.forEach((memberId) => {
+          io.to(`user-${memberId}`).emit("new-message", newMessage);
+        });
 
         console.log(
           `Message sent via socket: ${newMessage._id} in chat ${finalChatId}`
@@ -178,6 +258,15 @@ function initSocket(server) {
           details:
             process.env.NODE_ENV === "development" ? error.message : undefined,
         });
+      }
+    });
+
+    socket.on("wink-profile", async ({ profileId, userId }) => {
+      try {
+        console.log("Wink profile received:", { profileId, userId });
+        await winkProfile({ profileId, userId, io });
+      } catch (error) {
+        console.error("Error handling wink profile:", error);
       }
     });
 

@@ -22,7 +22,6 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false, // Prevent accidental exposure
     },
-
     // Profile completion
     profileCompleted: {
       type: Boolean,
@@ -195,6 +194,21 @@ const userSchema = new mongoose.Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    settings: {
+      type: Object,
+      default: {
+        getPrivateMessages: true,
+        getWinks: true,
+        getFriendInvites: true,
+        newMembersMatchMyRequirements: true,
+        profileVisibility: true,
+        whosLookedAtMe: true,
+        friendsListVisibility: true,
+        photoFabFeature: true,
+        nonMemberVisibility: true,
+        chatCameraVisibility: true,
+      },
     },
   },
   {

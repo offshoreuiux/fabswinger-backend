@@ -5,6 +5,9 @@ const {
   createChat,
   getChats,
   markAsRead,
+  clearChat,
+  leaveGroup,
+  updateGroup,
 } = require("../../controllers/chat/chatController");
 
 router.use(authenticateToken);
@@ -14,5 +17,11 @@ router.post("/create", createChat);
 router.get("/get", getChats);
 
 router.post("/markAsRead/:chatId", markAsRead);
+
+router.post("/clear/:chatId", clearChat);
+
+router.post("/leave/:chatId", leaveGroup);
+
+router.post("/update/:chatId", updateGroup);
 
 module.exports = router;

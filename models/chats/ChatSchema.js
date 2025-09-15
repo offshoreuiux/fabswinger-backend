@@ -9,6 +9,28 @@ const chatSchema = new mongoose.Schema(
         required: true,
       },
     ],
+    type: {
+      type: String,
+      enum: ["private", "group"],
+      default: "private",
+    },
+    name: {
+      type: String,
+      required: function () {
+        return this.type === "group";
+      },
+    },
+    description: {
+      type: String,
+      default: "",
+    },
+    admin: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: function () {
+        return this.type === "group";
+      },
+    },
     lastMessage: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",

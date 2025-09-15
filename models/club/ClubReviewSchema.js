@@ -29,4 +29,5 @@ const ClubReviewSchema = new mongoose.Schema({
   },
 });
 
-module.exports = mongoose.model("ClubReview", ClubReviewSchema);
+module.exports =
+  mongoose.models.ClubReview || mongoose.model("ClubReview", ClubReviewSchema);

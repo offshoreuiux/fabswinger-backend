@@ -64,6 +64,7 @@ const createClub = async (req, res) => {
       );
 
       const geoData = await geoRes.json();
+      console.log("geoData", geoData);
       if (geoData.length > 0) {
         console.log("geoData", geoData);
         const address = geoData[0].address;
@@ -197,6 +198,150 @@ const getClubs = async (req, res) => {
         name: { $regex: search, $options: "i" },
         ...query,
       });
+    } else if (sort === "most_popular") {
+      // Most popular = clubs with the most upcoming events + meets
+      const now = new Date();
+      const pipeline = [
+        {
+          $match: {
+            ...query,
+            name: { $regex: search, $options: "i" },
+            location: { $regex: location, $options: "i" },
+          },
+        },
+        {
+          $lookup: {
+            from: "events",
+            let: { clubId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$club", "$$clubId"] },
+                      { $gte: ["$date", now] },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: "upcomingEvents",
+          },
+        },
+        {
+          $lookup: {
+            from: "meets",
+            let: { clubId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$club", "$$clubId"] },
+                      { $gte: ["$date", now] },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: "upcomingMeets",
+          },
+        },
+        {
+          $addFields: {
+            upcomingEventsCount: {
+              $size: { $ifNull: ["$upcomingEvents", []] },
+            },
+            upcomingMeetsCount: { $size: { $ifNull: ["$upcomingMeets", []] } },
+          },
+        },
+        {
+          $addFields: {
+            totalUpcoming: {
+              $add: ["$upcomingEventsCount", "$upcomingMeetsCount"],
+            },
+          },
+        },
+        { $sort: { totalUpcoming: -1, createdAt: -1 } },
+        { $skip: skip },
+        { $limit: parseInt(limit) },
+        {
+          $project: {
+            upcomingEvents: 0,
+            upcomingMeets: 0,
+          },
+        },
+      ];
+
+      clubs = await Club.aggregate(pipeline);
+
+      // For total count, use the same match conditions without sorting/limits
+      totalCount = await Club.countDocuments({
+        ...query,
+        name: { $regex: search, $options: "i" },
+        location: { $regex: location, $options: "i" },
+      });
+    } else if (sort === "top_rated") {
+      // Use aggregation to calculate average ratings and sort by rating
+      const pipeline = [
+        {
+          $lookup: {
+            from: "clubreviews",
+            localField: "_id",
+            foreignField: "clubId",
+            as: "reviews",
+          },
+        },
+        {
+          $addFields: {
+            averageRating: {
+              $cond: {
+                if: { $gt: [{ $size: "$reviews" }, 0] },
+                then: { $avg: "$reviews.rating" },
+                else: 0,
+              },
+            },
+            reviewCount: { $size: "$reviews" },
+          },
+        },
+        {
+          $match: {
+            ...query,
+            name: { $regex: search, $options: "i" },
+            location: { $regex: location, $options: "i" },
+          },
+        },
+        {
+          $sort: { averageRating: -1, reviewCount: -1 }, // Sort by rating desc, then by review count desc
+        },
+        { $skip: skip },
+        { $limit: parseInt(limit) },
+      ];
+
+      clubs = await Club.aggregate(pipeline);
+
+      // Get total count for pagination
+      const countPipeline = [
+        {
+          $lookup: {
+            from: "clubreviews",
+            localField: "_id",
+            foreignField: "clubId",
+            as: "reviews",
+          },
+        },
+        {
+          $match: {
+            ...query,
+            name: { $regex: search, $options: "i" },
+            location: { $regex: location, $options: "i" },
+          },
+        },
+        { $count: "total" },
+      ];
+
+      const countResult = await Club.aggregate(countPipeline);
+      totalCount = countResult.length > 0 ? countResult[0].total : 0;
     } else {
       // Normal find for other sorts
       const mongoQuery = {
@@ -205,8 +350,6 @@ const getClubs = async (req, res) => {
         ...query,
       };
 
-      if (sort === "most_popular") mongoQuery.events = { $gt: 0 };
-      if (sort === "top_rated") mongoQuery.rating = { $gt: 0 };
       if (sort === "recently_active") {
         mongoQuery.createdAt = {
           $gt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5),

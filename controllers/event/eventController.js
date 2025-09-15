@@ -113,6 +113,7 @@ const createEvent = async (req, res) => {
       joinRequest,
       ageRange: ageRangeStr,
       eventRules,
+      region,
     } = req.body;
 
     // Parse ageRange from JSON string to array
@@ -133,10 +134,7 @@ const createEvent = async (req, res) => {
       people = [];
     }
     console.log("Request body:", req.body);
-    console.log("People field:", people);
-    console.log("Request file:", req.file);
     const image = req.file;
-    console.log("Image file:", image);
 
     if (
       !title ||
@@ -152,7 +150,8 @@ const createEvent = async (req, res) => {
       rsvpVerified === undefined ||
       rsvpEveryone === undefined ||
       joinRequest === undefined ||
-      ageRange === undefined
+      ageRange === undefined ||
+      region === undefined
     ) {
       return res.status(400).json({ message: "All fields are required" });
     }
@@ -219,6 +218,7 @@ const createEvent = async (req, res) => {
       joinRequest,
       ageRange,
       eventRules,
+      region,
     });
     await newEvent.save();
     await EventParticipant.create({
@@ -244,11 +244,13 @@ const getEvents = async (req, res) => {
       type = "all",
       latitude,
       longitude,
+      page = 1,
       limit = 10,
       maxDistance = 50,
       search = "",
       filter = {},
     } = req.query;
+    const skip = (page - 1) * limit;
 
     const userId = req.user.userId; // Get current user ID
 
@@ -315,7 +317,7 @@ const getEvents = async (req, res) => {
         const { region, type, distance, discover, sort } = JSON.parse(filter);
 
         if (region) filterQuery.region = region;
-        if (type) filterQuery.eventType = type;
+        if (type && type !== "any") filterQuery.eventType = type;
         if (distance && distance !== "all") {
           const currentUser = await User.findById(userId).select("geoLocation");
           const userCoordinates = currentUser?.geoLocation?.coordinates;
@@ -338,17 +340,121 @@ const getEvents = async (req, res) => {
             }
           }
         }
-        if (discover && discover !== "discover"){
-          
+        if (discover && discover !== "discover") {
+          // For scheduled/history, restrict to events the user participated in
+          if (discover === "scheduled" || discover === "history") {
+            const participated = await EventParticipant.find({
+              userId,
+              status: "approved",
+            }).select("eventId");
+            const participatedIds = participated.map((e) => e.eventId);
+            filterQuery._id = { $in: participatedIds };
+            if (discover === "scheduled") {
+              filterQuery.date = { $gte: new Date() };
+            } else {
+              filterQuery.date = { $lt: new Date() };
+            }
+          }
         }
-        if (sort) filterQuery.sort = sort;
+        if (sort === "most_popular") {
+          // Use aggregation to count participants and sort by participant count
+          const pipeline = [
+            {
+              $lookup: {
+                from: "eventparticipants",
+                let: { eventId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ["$eventId", "$$eventId"] },
+                          { $eq: ["$status", "approved"] },
+                        ],
+                      },
+                    },
+                  },
+                ],
+                as: "participants",
+              },
+            },
+            {
+              $addFields: {
+                participantCount: { $size: { $ifNull: ["$participants", []] } },
+              },
+            },
+            {
+              $match: {
+                title: { $regex: search, $options: "i" },
+                ...filterQuery,
+              },
+            },
+            {
+              $sort: { participantCount: -1, date: 1 }, // Sort by participant count desc, then by date asc
+            },
+            { $skip: parseInt(skip) },
+            { $limit: parseInt(limit) },
+            {
+              $project: {
+                participants: 0, // Remove the participants array from final result
+              },
+            },
+          ];
 
-        events = await Event.find({
-          title: { $regex: search, $options: "i" },
-          ...filterQuery,
-        })
-          .sort({ date: 1 })
-          .limit(parseInt(limit));
+          const aggregationResults = await Event.aggregate(pipeline);
+          // Convert aggregation results back to Mongoose documents
+          events = aggregationResults.map((result) => new Event(result));
+        } else {
+          if (sort) {
+            if (sort === "nearest") {
+              const currentUser = await User.findById(userId).select(
+                "geoLocation"
+              );
+              const userCoordinates = currentUser?.geoLocation?.coordinates;
+
+              if (!userCoordinates) {
+                return res
+                  .status(400)
+                  .json({ message: "User coordinates not found" });
+              }
+
+              const aggregationResults = await Event.aggregate([
+                {
+                  $geoNear: {
+                    near: { type: "Point", coordinates: userCoordinates },
+                    distanceField: "distance",
+                    spherical: true,
+                    key: "coordinates",
+                  },
+                },
+                {
+                  $match: {
+                    ...filterQuery,
+                    title: { $regex: search, $options: "i" },
+                  },
+                },
+                { $skip: parseInt(skip) },
+                { $limit: parseInt(limit) },
+              ]);
+              // Convert aggregation results back to Mongoose documents
+              events = aggregationResults.map((result) => new Event(result));
+            } else if (sort === "recently_created") {
+              filterQuery.createdAt = {
+                $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+              };
+            }
+          }
+
+          console.log("filterQuery", filterQuery);
+
+          events = await Event.find({
+            title: { $regex: search, $options: "i" },
+            ...filterQuery,
+          })
+            .sort({ date: 1 })
+            .limit(parseInt(limit));
+        }
+        if (region) filterQuery.region = region;
         break;
     }
 
@@ -456,6 +562,7 @@ const updateEvent = async (req, res) => {
       image: img,
       ageRange: ageRangeStr,
       eventRules,
+      region,
     } = req.body;
     const image = req.file;
     console.log("image", image);
@@ -535,6 +642,7 @@ const updateEvent = async (req, res) => {
         joinRequest,
         ageRange,
         eventRules,
+        region,
       },
       { new: true }
     );

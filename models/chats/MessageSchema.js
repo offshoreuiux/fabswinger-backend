@@ -12,6 +12,7 @@ const messageSchema = new mongoose.Schema({
   receiver: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
+    required: false, // Not required for group chats
   },
   content: {
     type: String,

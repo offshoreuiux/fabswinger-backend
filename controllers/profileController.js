@@ -4,6 +4,8 @@ const { v4: uuidv4 } = require("uuid");
 const s3 = require("../utils/s3");
 const mongoose = require("mongoose");
 const Friends = require("../models/FriendRequestSchema");
+const Wink = require("../models/WinkSchema");
+const NotificationService = require("../services/notificationService");
 
 // Update user profile
 const updateProfile = async (req, res) => {
@@ -106,6 +108,7 @@ const getProfile = async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
+
     res.json({ user });
   } catch (error) {
     console.error("Get profile error:", error);
@@ -136,7 +139,7 @@ const getProfiles = async (req, res) => {
     // Get the current user's friend IDs (both sent and received)
     const userFriendships = await Friends.find({
       $or: [{ sender: loggedInUserId }, { receiver: loggedInUserId }],
-      status: { $in: ["accepted", "pending"] }, // Include both accepted and pending requests
+      status: { $in: ["accepted"] }, // Include both accepted and pending requests
     });
 
     // Extract friend IDs from friendships
@@ -287,15 +290,54 @@ const getProfiles = async (req, res) => {
       }
     }
 
+    // Only show profiles where profileVisibility is true
+    query["settings.profileVisibility"] = true;
+
     const profiles = await User.find(query)
       .select("-password -email ")
       .sort({ _id: -1 })
       .limit(parseInt(limit));
 
+    // Get pending friend requests for each profile
+    const profilesWithFriendRequests = await Promise.all(
+      profiles.map(async (profile) => {
+        // Check for pending friend requests between logged-in user and this profile
+        const pendingRequest = await Friends.findOne({
+          $or: [
+            {
+              sender: loggedInUserId,
+              receiver: profile._id,
+              status: "pending",
+            },
+            {
+              sender: profile._id,
+              receiver: loggedInUserId,
+              status: "pending",
+            },
+          ],
+        });
+
+        // Add friend request details to profile
+        const profileWithRequest = profile.toObject();
+        if (pendingRequest) {
+          profileWithRequest.friendRequest = {
+            id: pendingRequest._id,
+            status: pendingRequest.status,
+            isSentByMe: pendingRequest.sender.toString() === loggedInUserId,
+            sentAt: pendingRequest.createdAt,
+          };
+        } else {
+          profileWithRequest.friendRequest = null;
+        }
+
+        return profileWithRequest;
+      })
+    );
+
     res.json({
-      profiles,
-      total: profiles.length,
-      hasMore: profiles.length === parseInt(limit),
+      profiles: profilesWithFriendRequests,
+      total: profilesWithFriendRequests.length,
+      hasMore: profilesWithFriendRequests.length === parseInt(limit),
     });
   } catch (error) {
     console.log("Error fetching profile list:", error);
@@ -307,16 +349,49 @@ const getProfiles = async (req, res) => {
 const getProfileById = async (req, res) => {
   try {
     const { id } = req.params;
+    const loggedInUserId = req.user.userId;
 
     const user = await User.findById(id).select("-password -email");
 
-    if (!user) {
+    if (!user || !user.settings.profileVisibility) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({ user });
+    // Check for pending friend requests between logged-in user and this profile
+    const friendRequest = await Friends.findOne({
+      $or: [
+        { sender: loggedInUserId, receiver: id },
+        { sender: id, receiver: loggedInUserId },
+      ],
+    });
+
+    // Add friend request details to user profile
+    const userWithRequest = user.toObject();
+    if (friendRequest) {
+      userWithRequest.friendRequest = {
+        id: friendRequest._id,
+        status: friendRequest.status,
+        isSentByMe: friendRequest.sender.toString() === loggedInUserId,
+        sentAt: friendRequest.createdAt,
+      };
+    } else {
+      userWithRequest.friendRequest = null;
+    }
+
+    res.json({ user: userWithRequest });
   } catch (error) {
     console.error("Get profile by ID error:", error);
+    res.status(500).json({ error: "Server error while fetching profile" });
+  }
+};
+
+const getPublicProfileById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id).select("-password -email");
+    res.json({ user });
+  } catch (error) {
+    console.error("Get public profile by ID error:", error);
     res.status(500).json({ error: "Server error while fetching profile" });
   }
 };
@@ -379,15 +454,13 @@ const deleteProfileImage = async (req, res) => {
     }
 
     // Remove the image from the array
-    user.profileImages = user.profileImages.filter(
-      (img) => img.url !== imageUrl
-    );
+    user.profileImage = "";
     user.updatedAt = new Date();
     await user.save();
 
     res.json({
       message: "Image deleted successfully",
-      profileImages: user.profileImages,
+      profileImage: user.profileImage,
     });
   } catch (error) {
     console.error("Delete profile image error:", error);
@@ -431,13 +504,78 @@ const updateLocation = async (req, res) => {
   }
 };
 
+const updateProfileSettings = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { setting, value } = req.body;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const newSettings = { ...user.settings, [setting]: value };
+    user.settings = newSettings;
+    await user.save();
+    res.json({
+      message: "Profile settings updated successfully",
+      settings: newSettings,
+    });
+  } catch (error) {
+    console.error("Update profile settings error:", error);
+    res
+      .status(500)
+      .json({ error: "Server error during profile settings update" });
+  }
+};
+
+const winkProfile = async ({ profileId, userId, io }) => {
+  try {
+    const user = await User.findById(profileId);
+    if (!user) {
+      return { error: "User not found" };
+    }
+
+    // Check if a wink already exists
+    let wink = await Wink.findOne({
+      winkerId: userId,
+      winkedProfileId: profileId,
+    });
+
+    if (wink) {
+      // If exists, increment count
+      wink.count += 1;
+      await wink.save();
+    } else {
+      // If not, create new
+      wink = await Wink.create({
+        winkerId: userId,
+        winkedProfileId: profileId,
+        count: 1,
+      });
+    }
+    if (user?.settings?.getWinks) {
+      await NotificationService.createProfileWinkNotification(
+        userId,
+        profileId
+      );
+    }
+
+    return { message: "Profile winked successfully", wink };
+  } catch (error) {
+    console.error("Error in winkProfile:", error);
+    return { error: "Internal server error" };
+  }
+};
+
 module.exports = {
   updateProfile,
   updatePassword,
   getProfile,
   getProfiles,
   getProfileById,
+  getPublicProfileById,
   updateProfileImage,
   deleteProfileImage,
   updateLocation,
+  updateProfileSettings,
+  winkProfile,
 };

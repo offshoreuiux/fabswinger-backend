@@ -27,6 +27,12 @@ const meetSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    state: {
+      type: String,
+    },
+    country: {
+      type: String,
+    },
     coordinates: {
       type: {
         type: String,

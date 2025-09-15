@@ -5,6 +5,7 @@ const {
   markAllNotificationsAsRead,
   deleteNotification,
   getUnreadCount,
+  getFilterCounts,
 } = require("../controllers/notificationController");
 const { authenticateToken } = require("../middleware");
 
@@ -18,6 +19,9 @@ router.get("/", getUserNotifications);
 
 // Get unread notification count
 router.get("/unread-count", getUnreadCount);
+
+// Get notification filter counts
+router.get("/filter-counts", getFilterCounts);
 
 // Mark specific notification as read
 router.put("/:notificationId/read", markNotificationAsRead);

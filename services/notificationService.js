@@ -1,6 +1,5 @@
 const Notification = require("../models/NotificationSchema");
 const User = require("../models/UserSchema");
-const { emitNotification, emitUnreadCountUpdate } = require("../utils/socket");
 const Comment = require("../models/forum/PostCommentSchema");
 
 class NotificationService {
@@ -15,6 +14,10 @@ class NotificationService {
 
       // Emit real-time notification to recipient
       try {
+        const {
+          emitNotification,
+          emitUnreadCountUpdate,
+        } = require("../utils/socket");
         emitNotification(notificationData.recipient, notification);
 
         // Update unread count for recipient
@@ -30,6 +33,51 @@ class NotificationService {
       return notification;
     } catch (error) {
       console.error("Error creating notification:", error);
+      throw error;
+    }
+  }
+
+  // Create private message notification
+  static async createPrivateMessageNotification(
+    senderId,
+    recipientId,
+    chatId,
+    messageText
+  ) {
+    try {
+      if (senderId.toString() === recipientId.toString()) {
+        return null;
+      }
+
+      const sender = await User.findById(senderId).select(
+        "nickname username profileImage"
+      );
+      if (!sender) throw new Error("Sender not found");
+
+      const truncated = (messageText || "").toString().trim();
+      const preview =
+        truncated.length > 80 ? truncated.substring(0, 80) + "..." : truncated;
+
+      const notificationData = {
+        recipient: recipientId,
+        sender: senderId,
+        type: "message",
+        title: "New Message",
+        message: `<span class="text-sm font-semibold capitalize">${
+          sender.nickname || sender.username
+        }</span>, sent you a message: ${preview}`,
+        // Linkable context kept in metadata since relatedItemModel doesn't include Chat/Message
+        relatedItem: senderId,
+        relatedItemModel: "User",
+        metadata: {
+          action: "view_chat",
+          chatId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating private message notification:", error);
       throw error;
     }
   }
@@ -858,33 +906,159 @@ class NotificationService {
     }
   }
 
+  static async createProfileWinkNotification(winkerId, profileOwnerId) {
+    try {
+      const winker = await User.findById(winkerId).select(
+        "nickname username profileImage"
+      );
+      if (!winker) throw new Error("Winker not found");
+
+      const notificationData = {
+        recipient: profileOwnerId,
+        sender: winkerId,
+        type: "profile_wink",
+        title: "New Wink",
+        message: `<span class="text-sm font-semibold capitalize">${
+          winker.nickname || winker.username
+        }</span> winked your profile`,
+        relatedItem: profileOwnerId,
+        relatedItemModel: "User",
+        metadata: {
+          action: "view_profile",
+          profileId: profileOwnerId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating profile wink notification:", error);
+      throw error;
+    }
+  }
+
   // Get user notifications
-  static async getUserNotifications(userId, page = 1, limit = 20) {
+  static async getUserNotifications(
+    userId,
+    page = 1,
+    limit = 20,
+    filter = null
+  ) {
     try {
       const skip = (page - 1) * limit;
 
-      const notifications = await Notification.find({
+      // Build query based on filter
+      const query = {
         recipient: userId,
         isDeleted: false,
-      })
+      };
+
+      // Add type filter if specified
+      if (filter && filter !== "All") {
+        const typeFilter = this.getNotificationTypesForFilter(filter);
+        if (typeFilter && typeFilter.length > 0) {
+          query.type = { $in: typeFilter };
+        }
+      }
+
+      const notifications = await Notification.find(query)
         .populate("sender", "nickname profileImage")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit);
 
-      const total = await Notification.countDocuments({
-        recipient: userId,
-        isDeleted: false,
-      });
+      const total = await Notification.countDocuments(query);
 
       return {
         notifications,
         total,
         page,
         totalPages: Math.ceil(total / limit),
+        hasMore: page < Math.ceil(total / limit),
       };
     } catch (error) {
       console.error("Error getting user notifications:", error);
+      throw error;
+    }
+  }
+
+  // Get notification types for a specific filter
+  static getNotificationTypesForFilter(filter) {
+    const filterMap = {
+      "Friend Requests": [
+        "friend_request",
+        "friend_request_accepted",
+        "friend_request_rejected",
+      ],
+      Winks: ["profile_wink"],
+      Events: [
+        "event_invite",
+        "event_application",
+        "event_application_accepted",
+        "event_application_rejected",
+        "event_participant_removed",
+      ],
+      Meets: [
+        "meet_application",
+        "meet_joined",
+        "meet_join_confirmation",
+        "meet_application_accepted",
+        "meet_application_rejected",
+        "meet_participant_removed",
+      ],
+      Clubs: ["hotlist_add", "verification_approved", "verification_rejected"],
+      Posts: [
+        "post_like",
+        "forum_like",
+        "post_comment",
+        "post_reply",
+        "forum_comment",
+      ],
+      Messages: ["message", "profile_view"],
+    };
+
+    return filterMap[filter] || [];
+  }
+
+  // Get filter counts for all notification types
+  static async getFilterCounts(userId) {
+    try {
+      const baseQuery = {
+        recipient: userId,
+        isDeleted: false,
+      };
+
+      const filters = [
+        "All",
+        "Friend Requests",
+        "Winks",
+        "Events",
+        "Meets",
+        "Clubs",
+        "Posts",
+        "Messages",
+      ];
+
+      const counts = {};
+
+      for (const filter of filters) {
+        if (filter === "All") {
+          counts[filter] = await Notification.countDocuments(baseQuery);
+        } else {
+          const typeFilter = this.getNotificationTypesForFilter(filter);
+          if (typeFilter && typeFilter.length > 0) {
+            counts[filter] = await Notification.countDocuments({
+              ...baseQuery,
+              type: { $in: typeFilter },
+            });
+          } else {
+            counts[filter] = 0;
+          }
+        }
+      }
+
+      return counts;
+    } catch (error) {
+      console.error("Error getting filter counts:", error);
       throw error;
     }
   }

@@ -4,35 +4,86 @@ const Friend = require("../../models/FriendRequestSchema");
 
 const createChat = async (req, res) => {
   try {
-    const { senderId, receiverId } = req.body;
-    if (!senderId || !receiverId) {
-      return res
-        .status(400)
-        .json({ message: "Sender and receiver IDs are required" });
+    const {
+      senderId,
+      receiverId,
+      type = "private",
+      name,
+      description,
+      memberIds,
+    } = req.body;
+
+    if (type === "private") {
+      // Private chat logic (existing)
+      if (!senderId || !receiverId) {
+        return res
+          .status(400)
+          .json({ message: "Sender and receiver IDs are required" });
+      }
+
+      const isFriend = await Friend.findOne({
+        $or: [
+          { sender: senderId, receiver: receiverId },
+          { sender: receiverId, receiver: senderId },
+        ],
+        status: "accepted",
+      });
+
+      if (!isFriend) {
+        return res.status(400).json({ message: "Not friends" });
+      }
+
+      const existingChat = await Chat.findOne({
+        members: { $all: [senderId, receiverId] },
+        type: "private",
+      });
+
+      if (existingChat) {
+        return res.status(200).json(existingChat);
+      }
+
+      const newChat = await Chat.create({
+        members: [senderId, receiverId],
+        type: "private",
+      });
+      res.status(201).json(newChat);
+    } else if (type === "group") {
+      // Group chat logic
+      if (
+        !name ||
+        !memberIds ||
+        !Array.isArray(memberIds) ||
+        memberIds.length < 2
+      ) {
+        return res.status(400).json({
+          message: "Group name and at least 2 members are required",
+        });
+      }
+
+      // Add the creator to the members list if not already included
+      const allMembers = [...new Set([senderId, ...memberIds])];
+
+      if (allMembers.length < 2) {
+        return res.status(400).json({
+          message: "Group must have at least 2 members",
+        });
+      }
+
+      const newChat = await Chat.create({
+        members: allMembers,
+        type: "group",
+        name,
+        description: description || "",
+        admin: senderId,
+      });
+
+      await newChat.populate("members", "username profileImage");
+      await newChat.populate("admin", "username profileImage");
+
+      res.status(201).json(newChat);
+    } else {
+      return res.status(400).json({ message: "Invalid chat type" });
     }
-
-    const isFriend = await Friend.findOne({
-      $or: [
-        { sender: senderId, receiver: receiverId },
-        { sender: receiverId, receiver: senderId },
-      ],
-      status: "accepted",
-    });
-
-    if (!isFriend) {
-      return res.status(400).json({ message: "Not friends" });
-    }
-
-    const existingChat = await Chat.findOne({
-      members: { $all: [senderId, receiverId] },
-    });
-
-    if (existingChat) {
-      return res.status(200).json(existingChat);
-    }
-
-    const newChat = await Chat.create({ members: [senderId, receiverId] });
-    res.status(201).json(newChat);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -99,15 +150,23 @@ const getChats = async (req, res) => {
       chats.map(async (chat) => {
         const chatObject = chat.toObject();
 
-        const otherMembers = chatObject.members.filter(
-          (member) => member._id.toString() !== userId
-        );
+        if (chat.type === "private") {
+          const otherMembers = chatObject.members.filter(
+            (member) => member._id.toString() !== userId
+          );
 
-        return {
-          ...chatObject,
-          members: otherMembers[0],
-          unreadCount: chat.unreadCount.get(userId) || 0,
-        };
+          return {
+            ...chatObject,
+            members: otherMembers[0],
+            unreadCount: chat.unreadCount.get(userId) || 0,
+          };
+        } else {
+          // Group chat
+          return {
+            ...chatObject,
+            unreadCount: chat.unreadCount.get(userId) || 0,
+          };
+        }
       })
     );
 
@@ -151,8 +210,81 @@ const markAsRead = async (req, res) => {
   }
 };
 
+const clearChat = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+    if (!chatId || !userId) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+    await Message.deleteMany({ chatId });
+    chat.unreadCount.set(userId, 0);
+    await chat.save();
+    res.status(200).json(chat);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const leaveGroup = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+    if (!chatId || !userId) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+    if (chat.admin.toString() === userId) {
+      return res
+        .status(400)
+        .json({ message: "You are the admin of this group, you cannot leave" });
+    }
+    chat.members = chat.members.filter(
+      (member) => member.toString() !== userId
+    );
+    await chat.save();
+    res.status(200).json(chat);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+const updateGroup = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { userId, name, description, members } = req.body;
+    if (!chatId || !userId || !name || !description || !members) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+    chat.name = name;
+    chat.description = description;
+    chat.members = members;
+    await chat.save();
+    const result = await chat.populate("members", "username profileImage");
+    res.status(200).json(result);
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createChat,
   getChats,
   markAsRead,
+  clearChat,
+  leaveGroup,
+  updateGroup,
 };

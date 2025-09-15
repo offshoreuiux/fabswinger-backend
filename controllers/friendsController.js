@@ -1,16 +1,99 @@
 const Friends = require("../models/FriendRequestSchema");
 const NotificationService = require("../services/notificationService");
+const User = require("../models/UserSchema");
 
 const getFriendList = async (req, res) => {
   try {
+    const { limit = 10, page = 1, search = "" } = req.query;
     const userId = req.user.userId;
 
-    const friendList = await Friends.find({
+    const skip = (page - 1) * limit;
+
+    // First, find all friends without search filter
+    let friendList = await Friends.find({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: { $nin: ["rejected", "blocked"] },
+    })
+      .populate("sender receiver", "-password -email")
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // If search is provided, filter the results
+    if (search && search.trim() !== "") {
+      const searchRegex = new RegExp(search, "i");
+      friendList = friendList.filter((friendship) => {
+        const sender = friendship.sender;
+        const receiver = friendship.receiver;
+
+        // Check if search matches sender or receiver
+        const senderMatch =
+          (sender.nickname && searchRegex.test(sender.nickname)) ||
+          (sender.username && searchRegex.test(sender.username)) ||
+          (sender.firstName && searchRegex.test(sender.firstName)) ||
+          (sender.lastName && searchRegex.test(sender.lastName));
+
+        const receiverMatch =
+          (receiver.nickname && searchRegex.test(receiver.nickname)) ||
+          (receiver.username && searchRegex.test(receiver.username)) ||
+          (receiver.firstName && searchRegex.test(receiver.firstName)) ||
+          (receiver.lastName && searchRegex.test(receiver.lastName));
+
+        return senderMatch || receiverMatch;
+      });
+    }
+
+    // Process the friend list to return the correct user info and status
+    const processedFriendList = friendList.map((friendship) => {
+      // If I'm the sender, show the receiver; if I'm the receiver, show the sender
+      const isCurrentUserSender = friendship.sender._id.toString() === userId;
+
+      return {
+        ...(isCurrentUserSender
+          ? friendship.receiver.toObject()
+          : friendship.sender.toObject()),
+        status: friendship.status,
+        isMutualFriend: false, // For current user's friends, this is always false
+      };
+    });
+
+    // For total count, we need to get all friends and then filter if search is provided
+    let allFriends = await Friends.find({
       $or: [{ sender: userId }, { receiver: userId }],
       status: { $nin: ["rejected", "blocked"] },
     }).populate("sender receiver", "-password -email");
 
-    res.json({ friendList });
+    // If search is provided, filter the results for count
+    if (search && search.trim() !== "") {
+      const searchRegex = new RegExp(search, "i");
+      allFriends = allFriends.filter((friendship) => {
+        const sender = friendship.sender;
+        const receiver = friendship.receiver;
+
+        // Check if search matches sender or receiver
+        const senderMatch =
+          (sender.nickname && searchRegex.test(sender.nickname)) ||
+          (sender.username && searchRegex.test(sender.username)) ||
+          (sender.firstName && searchRegex.test(sender.firstName)) ||
+          (sender.lastName && searchRegex.test(sender.lastName));
+
+        const receiverMatch =
+          (receiver.nickname && searchRegex.test(receiver.nickname)) ||
+          (receiver.username && searchRegex.test(receiver.username)) ||
+          (receiver.firstName && searchRegex.test(receiver.firstName)) ||
+          (receiver.lastName && searchRegex.test(receiver.lastName));
+
+        return senderMatch || receiverMatch;
+      });
+    }
+
+    const total = allFriends.length;
+    res.json({
+      friendList: processedFriendList,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      hasMore: processedFriendList.length === parseInt(limit),
+    });
   } catch (error) {
     console.log("Error in fetching friend list", error);
     res.status(500).json({ error: "internal server error" });
@@ -65,9 +148,7 @@ const addFriend = async (req, res) => {
     });
 
     if (existing) {
-      return res
-        .status(400)
-        .json({ error: "Friendship or request already exists" });
+      return res.status(400).json({ error: "Friendship request already sent" });
     }
 
     const friend = await Friends.create({
@@ -82,11 +163,14 @@ const addFriend = async (req, res) => {
 
     // Create notification for the recipient
     try {
-      await NotificationService.createFriendRequestNotification(
-        userId,
-        friendId,
-        friend._id
-      );
+      const user = await User.findById(friendId);
+      if (user?.settings?.getFriendInvites) {
+        await NotificationService.createFriendRequestNotification(
+          userId,
+          friendId,
+          friend._id
+        );
+      }
     } catch (notificationError) {
       console.error("Error creating notification:", notificationError);
       // Don't fail the request if notification fails
@@ -122,9 +206,11 @@ const removeFriend = async (req, res) => {
       return res.status(400).json({ error: "Friendship not found" });
     }
 
-    res
-      .status(200)
-      .json({ message: "Friend removed successfully", friendId: id });
+    res.status(200).json({
+      message: "Friend removed successfully",
+      friendId: id,
+      success: true,
+    });
   } catch (error) {
     console.log("Error in fetching friend list", error);
     res.status(500).json({ error: "internal server error" });
@@ -199,7 +285,6 @@ const acceptFriendRequest = async (req, res) => {
 
     // Find and update the original friend request notification
     try {
-      const Notification = require("../models/NotificationModel");
       const originalNotification = await Notification.findOne({
         type: "friend_request",
         sender: friendId,
@@ -260,7 +345,7 @@ const rejectFriendRequest = async (req, res) => {
 
     // Find and update the original friend request notification
     try {
-      const Notification = require("../models/NotificationModel");
+      const Notification = require("../models/NotificationSchema");
       const originalNotification = await Notification.findOne({
         type: "friend_request",
         sender: friendId,
@@ -302,16 +387,22 @@ const getOtherUserFriendList = async (req, res) => {
   try {
     const { userId } = req.params; // The user whose friends we want to see
     const currentUserId = req.user.userId; // The logged-in user
+    const { page = 1, limit = 10 } = req.query;
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Get the other user's friend list
+    const skip = (page - 1) * limit;
+
+    // Get the other user's friend list with pagination
     const otherUserFriends = await Friends.find({
       $or: [{ sender: userId }, { receiver: userId }],
       status: { $nin: ["rejected", "blocked"] },
-    }).populate("sender receiver", "-password -email");
+    })
+      .populate("sender receiver", "-password -email")
+      .skip(skip)
+      .limit(parseInt(limit));
 
     // Get current user's friend list for comparison
     const currentUserFriends = await Friends.find({
@@ -329,26 +420,38 @@ const getOtherUserFriendList = async (req, res) => {
       }
     });
 
-    // Add mutual friend status to each friend
-    const friendsWithMutualStatus = otherUserFriends.map((friend) => {
-      const friendId =
-        friend.sender.toString() === userId
-          ? friend.receiver._id.toString()
-          : friend.sender._id.toString();
+    // Process the friend list to return the correct user info and status
+    const friendsWithMutualStatus = otherUserFriends.map((friendship) => {
+      // If the target user is the sender, show the receiver; if the target user is the receiver, show the sender
+      const isTargetUserSender = friendship.sender._id.toString() === userId;
+      const friendUser = isTargetUserSender
+        ? friendship.receiver
+        : friendship.sender;
+      const friendId = friendUser._id.toString();
 
       const isMutualFriend = currentUserFriendIds.has(friendId);
 
       return {
-        ...friend.toObject(),
+        ...friendUser.toObject(),
+        status: friendship.status,
         isMutualFriend,
         mutualFriendStatus: isMutualFriend ? "mutual" : "not_mutual",
       };
     });
 
+    // Get total count for pagination
+    const total = await Friends.countDocuments({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: { $nin: ["rejected", "blocked"] },
+    });
+
     res.json({
       success: true,
       friends: friendsWithMutualStatus,
-      total: friendsWithMutualStatus.length,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      hasMore: friendsWithMutualStatus.length === parseInt(limit),
     });
   } catch (error) {
     console.error("Error getting other user's friend list:", error);

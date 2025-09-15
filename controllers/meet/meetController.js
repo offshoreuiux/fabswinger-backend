@@ -57,11 +57,13 @@ const createMeet = async (req, res) => {
 
     // Geocode location to get coordinates
     let coordinates = null;
+    let state = null;
+    let country = null;
     try {
       const geocodeResponse = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
           location
-        )}&limit=1`
+        )}&format=json&addressdetails=1&limit=1`
       );
       const geocodeData = await geocodeResponse.json();
       console.log("geocodeData", geocodeData);
@@ -74,6 +76,8 @@ const createMeet = async (req, res) => {
             parseFloat(geocodeData[0].lat),
           ],
         };
+        state = geocodeData[0].address.state.toLowerCase();
+        country = geocodeData[0].address.country.toLowerCase();
       }
     } catch (geocodeError) {
       console.log("Geocoding failed:", geocodeError.message);
@@ -86,6 +90,28 @@ const createMeet = async (req, res) => {
       date,
       time,
       location,
+      state,
+      country,
+      coordinates,
+      meetType,
+      capacity,
+      club,
+      people,
+      rsvpFriends,
+      rsvpVerified,
+      rsvpEveryone,
+      joinRequest,
+    });
+
+    console.log("newMeet", {
+      userId,
+      title,
+      description,
+      date,
+      time,
+      location,
+      state,
+      country,
       coordinates,
       meetType,
       capacity,
@@ -179,6 +205,35 @@ const getMeets = async (req, res) => {
       query.people = { $in: selectedPeople };
     }
 
+    if (when === "today") {
+      query.date = {
+        $gte: new Date(),
+        $lt: new Date(new Date().setDate(new Date().getDate() + 1)),
+      };
+    } else if (when === "this_week") {
+      query.date = {
+        $gte: new Date(),
+        $lt: new Date(new Date().setDate(new Date().getDate() + 7)),
+      };
+    } else if (when === "this_month") {
+      query.date = {
+        $gte: new Date(),
+        $lt: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+      };
+    } else if (when === "upcoming") {
+      query.date = { $gte: new Date() };
+    }
+
+    if (meetType && meetType !== "all") {
+      query.meetType = meetType;
+    }
+
+    if (countryRegion && countryRegion !== "all") {
+      query.country = countryRegion.toLowerCase();
+    }
+
+    console.log("query", query);
+
     switch (type) {
       case "scheduled":
         query.date = { $gte: new Date() };
@@ -251,6 +306,8 @@ const updateMeet = async (req, res) => {
       rsvpVerified,
       rsvpEveryone,
       joinRequest,
+      state,
+      country,
       coordinates,
     } = req.body;
     console.log("title", title);
@@ -265,6 +322,33 @@ const updateMeet = async (req, res) => {
       people = [];
     }
 
+    let newCoordinates = coordinates;
+    let newState = state;
+    let newCountry = country;
+    try {
+      const geocodeResponse = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          location
+        )}&limit=1`
+      );
+      const geocodeData = await geocodeResponse.json();
+      console.log("geocodeData", geocodeData);
+
+      if (geocodeData && geocodeData.length > 0) {
+        newCoordinates = {
+          type: "Point",
+          coordinates: [
+            parseFloat(geocodeData[0].lon),
+            parseFloat(geocodeData[0].lat),
+          ],
+        };
+        newState = geocodeData[0].state.toLowerCase();
+        newCountry = geocodeData[0].country.toLowerCase();
+      }
+    } catch (geocodeError) {
+      console.log("Geocoding failed:", geocodeError.message);
+    }
+
     const meet = await Meet.findByIdAndUpdate(
       id,
       {
@@ -273,7 +357,9 @@ const updateMeet = async (req, res) => {
         date,
         time,
         location,
-        coordinates,
+        coordinates: newCoordinates,
+        state: newState,
+        country: newCountry,
         meetType,
         capacity,
         club,
