@@ -1,6 +1,7 @@
 const ClubReview = require("../../models/club/ClubReviewSchema");
 
 const getClubReviews = async (req, res) => {
+  console.log("getClubReviews");
   try {
     const { clubId } = req.params;
     if (!clubId) {
