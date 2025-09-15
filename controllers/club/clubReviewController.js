@@ -1,4 +1,4 @@
-const ClubReview = require("../../models/club/clubReviewSchema");
+const ClubReview = require("../../models/club/ClubReviewSchema");
 
 const getClubReviews = async (req, res) => {
   try {
