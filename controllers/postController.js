@@ -302,12 +302,14 @@ const getPosts = async (req, res) => {
       latitude,
       longitude,
       radius = 10,
-      lastPostId,
       limit = 20,
       tab,
+      page = 1,
     } = req.query;
     const currentUserId = req.user.userId;
     const currentUserIdObj = new mongoose.Types.ObjectId(currentUserId);
+
+    const skip = (page - 1) * limit;
 
     // First, get the current user's friends list
     const currentUser = await User.findById(currentUserId);
@@ -441,10 +443,6 @@ const getPosts = async (req, res) => {
           maxDistance: radiusKm * 1000,
         };
       }
-    }
-
-    if (lastPostId && mongoose.Types.ObjectId.isValid(lastPostId)) {
-      query._id = { $lt: new mongoose.Types.ObjectId(lastPostId) };
     }
 
     // Build aggregation pipeline
@@ -587,6 +585,7 @@ const getPosts = async (req, res) => {
         },
       },
       { $sort: { createdAt: -1 } },
+      { $skip: parseInt(skip) },
       { $limit: parseInt(limit) }
     );
 
@@ -594,7 +593,10 @@ const getPosts = async (req, res) => {
     const posts = await Post.aggregate(pipeline);
     console.log(`Retrieved ${posts.length} posts for tab: ${tab || "All"}`);
 
-    res.status(200).json({ posts, hasMore: posts.length === parseInt(limit) });
+    // Calculate hasMore by checking if we got the full limit
+    const hasMore = posts.length === parseInt(limit);
+
+    res.status(200).json({ posts, hasMore });
   } catch (error) {
     console.error("Error in getPosts:", error);
     res.status(500).json({ error: "Internal server error" });
