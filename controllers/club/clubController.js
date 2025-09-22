@@ -46,8 +46,6 @@ const createClub = async (req, res) => {
     const uploadResult = await s3.upload(params).promise();
     const imageUrl = uploadResult.Location;
 
-    let state = "";
-    let country = "";
     let geoLocation = null;
 
     try {
@@ -67,9 +65,6 @@ const createClub = async (req, res) => {
       console.log("geoData", geoData);
       if (geoData.length > 0) {
         console.log("geoData", geoData);
-        const address = geoData[0].address;
-        state = address.state || "";
-        country = address.country || "";
 
         // Extract coordinates for geospatial queries
         const lat = parseFloat(geoData[0].lat);
@@ -94,8 +89,6 @@ const createClub = async (req, res) => {
       url,
       location,
       geoLocation,
-      state,
-      country,
       clubEmail,
       phone,
       people,
@@ -186,7 +179,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            location: { $regex: location, $options: "i" },
+            region: { $regex: location, $options: "i" },
           },
         },
         { $skip: skip },
@@ -194,7 +187,7 @@ const getClubs = async (req, res) => {
       ]);
 
       totalCount = await Club.countDocuments({
-        location: { $regex: location, $options: "i" },
+        region: { $regex: location, $options: "i" },
         name: { $regex: search, $options: "i" },
         ...query,
       });
@@ -206,7 +199,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            location: { $regex: location, $options: "i" },
+            region: { $regex: location, $options: "i" },
           },
         },
         {
@@ -279,7 +272,7 @@ const getClubs = async (req, res) => {
       totalCount = await Club.countDocuments({
         ...query,
         name: { $regex: search, $options: "i" },
-        location: { $regex: location, $options: "i" },
+        region: { $regex: location, $options: "i" },
       });
     } else if (sort === "top_rated") {
       // Use aggregation to calculate average ratings and sort by rating
@@ -308,7 +301,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            location: { $regex: location, $options: "i" },
+            region: { $regex: location, $options: "i" },
           },
         },
         {
@@ -334,7 +327,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            location: { $regex: location, $options: "i" },
+            region: { $regex: location, $options: "i" },
           },
         },
         { $count: "total" },
@@ -345,7 +338,7 @@ const getClubs = async (req, res) => {
     } else {
       // Normal find for other sorts
       const mongoQuery = {
-        location: { $regex: location, $options: "i" },
+        region: { $regex: location, $options: "i" },
         name: { $regex: search, $options: "i" },
         ...query,
       };
@@ -417,8 +410,6 @@ const updateClub = async (req, res) => {
       imageUrl = uploadResult.Location;
     }
 
-    let state = "";
-    let country = "";
     let geoLocation = null;
 
     try {
@@ -436,10 +427,6 @@ const updateClub = async (req, res) => {
 
       const geoData = await geoRes.json();
       if (geoData.length > 0) {
-        const address = geoData[0].address;
-        state = address.state || "";
-        country = address.country || "";
-
         // Extract coordinates for geospatial queries
         const lat = parseFloat(geoData[0].lat);
         const lon = parseFloat(geoData[0].lon);
@@ -469,8 +456,6 @@ const updateClub = async (req, res) => {
         url,
         location,
         geoLocation,
-        state,
-        country,
         clubEmail,
         phone,
         people,

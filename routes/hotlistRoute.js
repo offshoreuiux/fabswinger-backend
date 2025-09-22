@@ -11,11 +11,14 @@ const {
   addMeetToHotlist,
   deleteMeetFromHotlist,
   getMeetHotlist,
+  isProfileInHotlist,
 } = require("../controllers/hotlistController");
 
 router.use(authenticateToken);
 
 router.get("/profile", getProfileHotlist);
+
+router.post("/profile/is-in-hotlist", isProfileInHotlist);
 
 router.post("/profile", addProfileToHotlist);
 
