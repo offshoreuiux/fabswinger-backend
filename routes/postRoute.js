@@ -14,6 +14,7 @@ const {
   unwinkPost,
   hotlistPost,
   unhotlistPost,
+  getPostsByUserId,
 } = require("../controllers/postController");
 
 router.post("/create", authenticateToken, upload.array("images"), createPost);
@@ -27,5 +28,6 @@ router.delete("/:postId/hotlist", authenticateToken, unhotlistPost);
 // router.get("/:id", authenticateToken, getPostById);
 // router.put("/:id", authenticateToken, updatePost);
 router.delete("/:postId", authenticateToken, deletePost);
+router.get("/:userId", authenticateToken, getPostsByUserId);
 
 module.exports = router;

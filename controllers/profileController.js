@@ -1,7 +1,7 @@
 const User = require("../models/UserSchema");
 const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
-const s3 = require("../utils/s3");
+const { s3, getS3KeyFromUrl } = require("../utils/s3");
 const mongoose = require("mongoose");
 const Friends = require("../models/FriendRequestSchema");
 const Wink = require("../models/WinkSchema");
@@ -11,14 +11,24 @@ const NotificationService = require("../services/notificationService");
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const updateData = req.body;
+    const updateData = { ...req.body };
 
     // Remove sensitive fields that shouldn't be updated via this endpoint
-    delete updateData.password;
-    delete updateData.email;
-    delete updateData.username;
-    delete updateData.isVerified;
-    delete updateData.isActive;
+    const sensitiveFields = [
+      "password",
+      "email",
+      "username",
+      "isVerified",
+      "isActive",
+      "role",
+      "createdAt",
+      "_id",
+      "__v",
+    ];
+
+    sensitiveFields.forEach((field) => {
+      delete updateData[field];
+    });
 
     // Filter out empty strings for enum fields to prevent validation errors
     const enumFields = ["gender", "sexuality", "bodyType", "ethnicity"];
@@ -43,11 +53,13 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { ...updateData, updatedAt: new Date() },
-      { new: true, runValidators: true }
-    ).select("-password");
+    // Add updatedAt timestamp
+    updateData.updatedAt = new Date();
+
+    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+      new: true,
+      runValidators: true,
+    }).select("-password");
 
     if (!updatedUser) {
       return res.status(404).json({ error: "User not found" });
@@ -389,6 +401,13 @@ const getPublicProfileById = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await User.findById(id).select("-password -email");
+    if (
+      !user ||
+      !user.settings.profileVisibility ||
+      !user.settings.nonMemberVisibility
+    ) {
+      return res.status(404).json({ error: "User not found" });
+    }
     res.json({ user });
   } catch (error) {
     console.error("Get public profile by ID error:", error);
@@ -446,22 +465,31 @@ const updateProfileImage = async (req, res) => {
 const deleteProfileImage = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { imageUrl } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Remove the image from the array
-    user.profileImage = "";
-    user.updatedAt = new Date();
-    await user.save();
+    if (user.profileImage) {
+      const key = getS3KeyFromUrl(user.profileImage);
+      await s3
+        .deleteObject({
+          Bucket: process.env.AWS_S3_BUCKET_NAME,
+          Key: key,
+        })
+        .promise();
+      user.profileImage = "";
+      user.updatedAt = new Date();
+      await user.save();
 
-    res.json({
-      message: "Image deleted successfully",
-      profileImage: user.profileImage,
-    });
+      res.json({
+        message: "Image deleted successfully",
+        profileImage: user.profileImage,
+      });
+    } else {
+      return res.status(400).json({ error: "No image to delete" });
+    }
   } catch (error) {
     console.error("Delete profile image error:", error);
     res.status(500).json({ error: "Server error during image deletion" });

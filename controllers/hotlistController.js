@@ -128,6 +128,13 @@ const getProfileHotlist = async (req, res) => {
   }
 };
 
+const isProfileInHotlist = async (req, res) => {
+  const { profileId } = req.body;
+  const userId = req.user.userId;
+  const hotlist = await ProfileHotlist.findOne({ profileId, userId });
+  res.json({ isInHotlist: !!hotlist });
+};
+
 const addProfileToHotlist = async (req, res) => {
   if (!req.body) {
     return res.status(400).json({ error: "Profile ID is required" });
@@ -456,7 +463,7 @@ const deleteMeetFromHotlist = async (req, res) => {
 
 module.exports = {
   getProfileHotlist,
-
+  isProfileInHotlist,
   addProfileToHotlist,
   deleteProfileFromHotlist,
   getEventHotlist,
