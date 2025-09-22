@@ -32,12 +32,6 @@ const clubSchema = new mongoose.Schema(
         index: "2dsphere",
       },
     },
-    state: {
-      type: String,
-    },
-    country: {
-      type: String,
-    },
     clubEmail: {
       type: String,
       required: true,

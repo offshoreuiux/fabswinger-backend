@@ -27,12 +27,19 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-
+    title: {
+      type: String,
+      trim: true,
+    },
     // Personal Identity
     nickname: {
       type: String,
       trim: true,
       required: false,
+    },
+    lastName: {
+      type: String,
+      trim: true,
     },
     about: {
       type: String,
@@ -68,6 +75,14 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
     postcode: {
+      type: String,
+      trim: true,
+    },
+    firstHalfPostcode: {
+      type: String,
+      trim: true,
+    },
+    town: {
       type: String,
       trim: true,
     },
@@ -157,6 +172,10 @@ const userSchema = new mongoose.Schema(
 
     // Profile images
     profileImage: {
+      type: String,
+      default: "",
+    },
+    mobileNumber: {
       type: String,
       default: "",
     },

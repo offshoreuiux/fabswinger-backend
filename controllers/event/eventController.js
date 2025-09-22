@@ -171,8 +171,6 @@ const createEvent = async (req, res) => {
 
     // Geocode location to get coordinates
     let coordinates = null;
-    let state = "";
-    let country = "";
     try {
       const geocodeResponse = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
@@ -190,8 +188,6 @@ const createEvent = async (req, res) => {
             parseFloat(geocodeData[0].lat),
           ],
         };
-        state = geocodeData[0].state;
-        country = geocodeData[0].country;
       }
     } catch (geocodeError) {
       console.log("Geocoding failed:", geocodeError.message);
@@ -204,8 +200,6 @@ const createEvent = async (req, res) => {
       date,
       time,
       location,
-      state,
-      country,
       coordinates,
       image: imageUrl,
       eventType,
@@ -249,19 +243,461 @@ const getEvents = async (req, res) => {
       maxDistance = 50,
       search = "",
       filter = {},
+      sortBy = "",
+      seeAll = false,
     } = req.query;
-    const skip = (page - 1) * limit;
+    const numericLimit = parseInt(limit);
+    const numericPage = parseInt(page);
+    const skip = (numericPage - 1) * numericLimit;
 
     const userId = req.user.userId; // Get current user ID
+    console.log("filter", filter);
 
     let events;
+    let totalCount = 0;
     let query = {};
 
+    // Parse filter object if it's a string
+    let parsedFilter = {};
+    if (typeof filter === "string") {
+      try {
+        parsedFilter = JSON.parse(filter);
+      } catch (e) {
+        parsedFilter = {};
+      }
+    } else {
+      parsedFilter = filter;
+    }
+
+    // Helper function to build filter query
+    const buildFilterQuery = async (baseQuery = {}) => {
+      const {
+        region,
+        type: eventType,
+        distance,
+        discover,
+        sort,
+      } = parsedFilter;
+      let filterQuery = { ...baseQuery };
+
+      if (region) filterQuery.region = region;
+      if (eventType && eventType !== "any") filterQuery.eventType = eventType;
+
+      if (distance && distance !== "all") {
+        const currentUser = await User.findById(userId).select("geoLocation");
+        const userCoordinates = currentUser?.geoLocation?.coordinates;
+
+        if (userCoordinates) {
+          let maxDistance = 0;
+          if (distance === "25") maxDistance = 25;
+          else if (distance === "50") maxDistance = 50;
+          else if (distance === "75") maxDistance = 75;
+          else if (distance === "100") maxDistance = 100;
+          else if (distance === "150") maxDistance = 150;
+
+          if (maxDistance > 0) {
+            const distanceMeters = Math.round(maxDistance * 1609.34);
+            filterQuery.coordinates = {
+              $geoWithin: {
+                $centerSphere: [userCoordinates, distanceMeters / 6378137],
+              },
+            };
+          }
+        }
+      }
+
+      if (discover && discover !== "discover") {
+        if (discover === "scheduled" || discover === "history") {
+          const participated = await EventParticipant.find({
+            userId,
+            status: "approved",
+          }).select("eventId");
+          const participatedIds = participated.map((e) => e.eventId);
+          filterQuery._id = { $in: participatedIds };
+          if (discover === "scheduled") {
+            filterQuery.date = { $gte: new Date() };
+          } else {
+            filterQuery.date = { $lt: new Date() };
+          }
+        }
+      }
+
+      return filterQuery;
+    };
+
     switch (type) {
-      case "latest":
-        // Get latest events (most recently created)
-        events = await Event.find().sort({ date: 1 }).limit(parseInt(limit));
+      case "latest": {
+        if (seeAll === "true" || seeAll === true) {
+          const filterQuery = await buildFilterQuery();
+          const { sort } = parsedFilter;
+
+          let sortQuery = { date: 1 }; // Default sort
+          if (sort === "most_popular") {
+            // Use aggregation for participant count sorting
+            const pipeline = [
+              {
+                $lookup: {
+                  from: "eventparticipants",
+                  let: { eventId: "$_id" },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $and: [
+                            { $eq: ["$eventId", "$$eventId"] },
+                            { $eq: ["$status", "approved"] },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                  as: "participants",
+                },
+              },
+              {
+                $addFields: {
+                  participantCount: {
+                    $size: { $ifNull: ["$participants", []] },
+                  },
+                },
+              },
+              {
+                $match: {
+                  title: { $regex: search, $options: "i" },
+                  ...filterQuery,
+                },
+              },
+              {
+                $sort: { participantCount: -1, date: 1 },
+              },
+              { $skip: skip },
+              { $limit: numericLimit },
+              {
+                $project: {
+                  participants: 0,
+                },
+              },
+            ];
+
+            const countPipeline = [
+              {
+                $match: {
+                  title: { $regex: search, $options: "i" },
+                  ...filterQuery,
+                },
+              },
+              { $count: "count" },
+            ];
+
+            const [aggResults, countResults] = await Promise.all([
+              Event.aggregate(pipeline),
+              Event.aggregate(countPipeline),
+            ]);
+            events = aggResults.map((result) => new Event(result));
+            totalCount = countResults?.[0]?.count || 0;
+          } else if (sort === "nearest") {
+            const currentUser = await User.findById(userId).select(
+              "geoLocation"
+            );
+            const userCoordinates = currentUser?.geoLocation?.coordinates;
+
+            if (userCoordinates) {
+              const pipeline = [
+                {
+                  $geoNear: {
+                    near: { type: "Point", coordinates: userCoordinates },
+                    distanceField: "distance",
+                    spherical: true,
+                    key: "coordinates",
+                  },
+                },
+                {
+                  $match: {
+                    ...filterQuery,
+                    title: { $regex: search, $options: "i" },
+                  },
+                },
+                { $skip: skip },
+                { $limit: numericLimit },
+              ];
+              events = (await Event.aggregate(pipeline)).map(
+                (result) => new Event(result)
+              );
+              totalCount = await Event.countDocuments({
+                ...filterQuery,
+                title: { $regex: search, $options: "i" },
+              });
+            } else {
+              // Fallback to regular query if no coordinates
+              totalCount = await Event.countDocuments({
+                title: { $regex: search, $options: "i" },
+                ...filterQuery,
+              });
+              events = await Event.find({
+                title: { $regex: search, $options: "i" },
+                ...filterQuery,
+              })
+                .sort(sortQuery)
+                .skip(skip)
+                .limit(numericLimit);
+            }
+          } else {
+            totalCount = await Event.countDocuments({
+              title: { $regex: search, $options: "i" },
+              ...filterQuery,
+            });
+            events = await Event.find({
+              title: { $regex: search, $options: "i" },
+              ...filterQuery,
+            })
+              .sort(sortQuery)
+              .skip(skip)
+              .limit(numericLimit);
+          }
+        } else {
+          totalCount = await Event.countDocuments();
+          events = await Event.find()
+            .sort({ date: 1 })
+            .skip(skip)
+            .limit(numericLimit);
+        }
         break;
+      }
+
+      case "popular": {
+        if (seeAll === "true" || seeAll === true) {
+          const filterQuery = await buildFilterQuery();
+          const { sort } = parsedFilter;
+
+          let sortStage = { participantCount: -1, date: -1 }; // Default sort
+          if (sort === "nearest") {
+            const currentUser = await User.findById(userId).select(
+              "geoLocation"
+            );
+            const userCoordinates = currentUser?.geoLocation?.coordinates;
+
+            if (userCoordinates) {
+              const pipeline = [
+                {
+                  $geoNear: {
+                    near: { type: "Point", coordinates: userCoordinates },
+                    distanceField: "distance",
+                    spherical: true,
+                    key: "coordinates",
+                  },
+                },
+                {
+                  $lookup: {
+                    from: "eventparticipants",
+                    let: { eventId: "$_id" },
+                    pipeline: [
+                      {
+                        $match: {
+                          $expr: {
+                            $and: [
+                              { $eq: ["$eventId", "$$eventId"] },
+                              { $eq: ["$status", "approved"] },
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                    as: "participants",
+                  },
+                },
+                {
+                  $addFields: {
+                    participantCount: {
+                      $size: { $ifNull: ["$participants", []] },
+                    },
+                  },
+                },
+                {
+                  $match: {
+                    title: { $regex: search, $options: "i" },
+                    ...filterQuery,
+                  },
+                },
+                { $sort: { distance: 1, participantCount: -1 } },
+                { $skip: skip },
+                { $limit: numericLimit },
+                { $project: { participants: 0 } },
+              ];
+
+              const countPipeline = [
+                {
+                  $match: {
+                    title: { $regex: search, $options: "i" },
+                    ...filterQuery,
+                  },
+                },
+                { $count: "count" },
+              ];
+
+              const [aggResults, countResults] = await Promise.all([
+                Event.aggregate(pipeline),
+                Event.aggregate(countPipeline),
+              ]);
+              events = aggResults.map((result) => new Event(result));
+              totalCount = countResults?.[0]?.count || 0;
+            } else {
+              // Fallback to regular popular sorting if no coordinates
+              const pipeline = [
+                {
+                  $lookup: {
+                    from: "eventparticipants",
+                    let: { eventId: "$_id" },
+                    pipeline: [
+                      {
+                        $match: {
+                          $expr: {
+                            $and: [
+                              { $eq: ["$eventId", "$$eventId"] },
+                              { $eq: ["$status", "approved"] },
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                    as: "participants",
+                  },
+                },
+                {
+                  $addFields: {
+                    participantCount: {
+                      $size: { $ifNull: ["$participants", []] },
+                    },
+                  },
+                },
+                {
+                  $match: {
+                    title: { $regex: search, $options: "i" },
+                    ...filterQuery,
+                  },
+                },
+                { $sort: sortStage },
+                { $skip: skip },
+                { $limit: numericLimit },
+                { $project: { participants: 0 } },
+              ];
+
+              const countPipeline = [
+                {
+                  $match: {
+                    title: { $regex: search, $options: "i" },
+                    ...filterQuery,
+                  },
+                },
+                { $count: "count" },
+              ];
+
+              const [aggResults, countResults] = await Promise.all([
+                Event.aggregate(pipeline),
+                Event.aggregate(countPipeline),
+              ]);
+              events = aggResults.map((result) => new Event(result));
+              totalCount = countResults?.[0]?.count || 0;
+            }
+          } else {
+            const pipeline = [
+              {
+                $lookup: {
+                  from: "eventparticipants",
+                  let: { eventId: "$_id" },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $and: [
+                            { $eq: ["$eventId", "$$eventId"] },
+                            { $eq: ["$status", "approved"] },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                  as: "participants",
+                },
+              },
+              {
+                $addFields: {
+                  participantCount: {
+                    $size: { $ifNull: ["$participants", []] },
+                  },
+                },
+              },
+              {
+                $match: {
+                  title: { $regex: search, $options: "i" },
+                  ...filterQuery,
+                },
+              },
+              { $sort: sortStage },
+              { $skip: skip },
+              { $limit: numericLimit },
+              { $project: { participants: 0 } },
+            ];
+            const countPipeline = [
+              {
+                $match: {
+                  title: { $regex: search, $options: "i" },
+                  ...filterQuery,
+                },
+              },
+              { $count: "count" },
+            ];
+            const [aggResults, countResults] = await Promise.all([
+              Event.aggregate(pipeline),
+              Event.aggregate(countPipeline),
+            ]);
+            events = aggResults.map((result) => new Event(result));
+            totalCount = countResults?.[0]?.count || 0;
+          }
+        } else {
+          const pipeline = [
+            {
+              $lookup: {
+                from: "eventparticipants",
+                let: { eventId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ["$eventId", "$$eventId"] },
+                          { $eq: ["$status", "approved"] },
+                        ],
+                      },
+                    },
+                  },
+                ],
+                as: "participants",
+              },
+            },
+            {
+              $addFields: {
+                participantCount: { $size: { $ifNull: ["$participants", []] } },
+              },
+            },
+            { $match: { title: { $regex: search, $options: "i" } } },
+            { $sort: { participantCount: -1, date: -1 } },
+            { $skip: skip },
+            { $limit: numericLimit },
+            { $project: { participants: 0 } },
+          ];
+          const countPipeline = [
+            { $match: { title: { $regex: search, $options: "i" } } },
+            { $count: "count" },
+          ];
+          const [aggResults, countResults] = await Promise.all([
+            Event.aggregate(pipeline),
+            Event.aggregate(countPipeline),
+          ]);
+          events = aggResults.map((result) => new Event(result));
+          totalCount = countResults?.[0]?.count || 0;
+        }
+        break;
+      }
 
       case "nearest":
         // Get nearest events based on user location
@@ -272,24 +708,99 @@ const getEvents = async (req, res) => {
         }
 
         try {
+          const MILES_TO_METERS = 1609.34;
+          const EARTH_RADIUS_METERS = 6378137;
           const userLocation = {
             type: "Point",
             coordinates: [parseFloat(longitude), parseFloat(latitude)],
           };
+          const maxDistanceMiles = parseFloat(maxDistance);
+          const maxDistanceMeters = maxDistanceMiles * MILES_TO_METERS;
 
-          console.log("Searching for events near:", userLocation);
-          console.log("Max distance:", maxDistance, "km");
+          let additionalFilters = {};
+          let sortOption = sortBy;
+          if (seeAll === "true" || seeAll === true) {
+            additionalFilters = await buildFilterQuery();
+            const { sort } = parsedFilter;
+            if (sort && sort !== "all") {
+              sortOption = sort;
+            }
+          }
 
-          events = await Event.find({
-            coordinates: {
-              $near: {
-                $geometry: userLocation,
-                $maxDistance: parseFloat(maxDistance) * 1000, // Convert km to meters
+          const geoPipeline = [
+            {
+              $geoNear: {
+                near: userLocation,
+                distanceField: "distanceInMiles",
+                spherical: true,
+                key: "coordinates",
+                maxDistance: maxDistanceMeters,
+                distanceMultiplier: 0.000621371, // meters -> miles
               },
             },
-          }).limit(parseInt(limit));
+            {
+              $match: {
+                title: { $regex: search, $options: "i" },
+                ...additionalFilters,
+              },
+            },
+          ];
 
-          console.log(`Found ${events.length} events within ${maxDistance}km`);
+          if (sortOption === "participants" || sortOption === "most_popular") {
+            geoPipeline.push(
+              {
+                $lookup: {
+                  from: "eventparticipants",
+                  let: { eventId: "$_id" },
+                  pipeline: [
+                    {
+                      $match: {
+                        $expr: {
+                          $and: [
+                            { $eq: ["$eventId", "$$eventId"] },
+                            { $eq: ["$status", "approved"] },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                  as: "participants",
+                },
+              },
+              {
+                $addFields: {
+                  participantCount: {
+                    $size: { $ifNull: ["$participants", []] },
+                  },
+                },
+              },
+              { $sort: { participantCount: -1, distanceInMiles: 1 } },
+              { $project: { participants: 0 } }
+            );
+          } else {
+            geoPipeline.push({ $sort: { distanceInMiles: 1 } });
+          }
+
+          geoPipeline.push({ $skip: skip }, { $limit: numericLimit });
+
+          const distanceMeters = maxDistanceMeters;
+          const [aggResults, countResults] = await Promise.all([
+            Event.aggregate(geoPipeline),
+            Event.countDocuments({
+              coordinates: {
+                $geoWithin: {
+                  $centerSphere: [
+                    [userLocation.coordinates[0], userLocation.coordinates[1]],
+                    distanceMeters / EARTH_RADIUS_METERS,
+                  ],
+                },
+              },
+              title: { $regex: search, $options: "i" },
+              ...additionalFilters,
+            }),
+          ]);
+          events = aggResults.map((result) => new Event(result));
+          totalCount = countResults || 0;
 
           // Fallback if no nearby events
           // if (events.length === 0) {
@@ -304,9 +815,11 @@ const getEvents = async (req, res) => {
           console.error("Geospatial query error:", geoError);
           // Fallback to latest events if geospatial query fails
           console.log("Falling back to latest events due to geospatial error");
+          totalCount = await Event.countDocuments();
           events = await Event.find()
             .sort({ createdAt: -1 })
-            .limit(parseInt(limit));
+            .skip(skip)
+            .limit(numericLimit);
         }
         break;
 
@@ -401,11 +914,23 @@ const getEvents = async (req, res) => {
             },
           ];
 
-          const aggregationResults = await Event.aggregate(pipeline);
+          const [aggregationResults, countAgg] = await Promise.all([
+            Event.aggregate(pipeline),
+            Event.aggregate([
+              {
+                $match: {
+                  title: { $regex: search, $options: "i" },
+                  ...filterQuery,
+                },
+              },
+              { $count: "count" },
+            ]),
+          ]);
           // Convert aggregation results back to Mongoose documents
           events = aggregationResults.map((result) => new Event(result));
+          totalCount = countAgg?.[0]?.count || 0;
         } else {
-          if (sort) {
+          if (sort && sort !== "all") {
             if (sort === "nearest") {
               const currentUser = await User.findById(userId).select(
                 "geoLocation"
@@ -445,21 +970,23 @@ const getEvents = async (req, res) => {
             }
           }
 
-          console.log("filterQuery", filterQuery);
-
+          totalCount = await Event.countDocuments({
+            title: { $regex: search, $options: "i" },
+            ...filterQuery,
+          });
           events = await Event.find({
             title: { $regex: search, $options: "i" },
             ...filterQuery,
           })
             .sort({ date: 1 })
-            .limit(parseInt(limit));
+            .skip(skip)
+            .limit(numericLimit);
         }
         if (region) filterQuery.region = region;
         break;
     }
 
     // Filter events based on visibility rules
-    console.log("events before filtering", events);
 
     // Get user's verification status and friends list
     const user = await User.findById(userId);
@@ -523,8 +1050,6 @@ const getEvents = async (req, res) => {
       return false;
     });
 
-    console.log("filtered events", filteredEvents);
-
     const eventsWithHotlistInfo = await addHotlistInfoToEvents(
       filteredEvents,
       userId
@@ -534,7 +1059,16 @@ const getEvents = async (req, res) => {
       userId
     );
 
-    res.status(200).json({ events: eventsWithParticipantDetails });
+    const totalPages = Math.ceil((totalCount || 0) / numericLimit) || 0;
+    const hasMore = numericPage < totalPages;
+    res.status(200).json({
+      events: eventsWithParticipantDetails,
+      page: numericPage,
+      limit: numericLimit,
+      total: totalCount,
+      totalPages,
+      hasMore,
+    });
   } catch (error) {
     console.error("Error in getEvents:", error);
     res
@@ -565,9 +1099,6 @@ const updateEvent = async (req, res) => {
       region,
     } = req.body;
     const image = req.file;
-    console.log("image", image);
-    console.log("title", title);
-    console.log("img", img);
 
     // Handle people array from FormData
     let people = req.body.people;
@@ -598,8 +1129,6 @@ const updateEvent = async (req, res) => {
     } catch (error) {
       return res.status(400).json({ message: "Invalid age range format" });
     }
-    let state = "";
-    let country = "";
     let coordinates = null;
     try {
       const geocodeResponse = await fetch(
@@ -615,8 +1144,6 @@ const updateEvent = async (req, res) => {
           parseFloat(geocodeData[0].lat),
         ],
       };
-      state = geocodeData[0].state;
-      country = geocodeData[0].country;
     } catch (geocodeError) {
       console.log("Geocoding failed:", geocodeError.message);
     }
@@ -628,8 +1155,6 @@ const updateEvent = async (req, res) => {
         date,
         time,
         location,
-        state,
-        country,
         coordinates,
         image: typeof img === "string" ? img : imageUrl,
         eventType,

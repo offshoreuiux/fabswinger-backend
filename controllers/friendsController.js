@@ -1,6 +1,7 @@
 const Friends = require("../models/FriendRequestSchema");
 const NotificationService = require("../services/notificationService");
 const User = require("../models/UserSchema");
+const Notification = require("../models/NotificationSchema");
 
 const getFriendList = async (req, res) => {
   try {
@@ -176,7 +177,10 @@ const addFriend = async (req, res) => {
       // Don't fail the request if notification fails
     }
 
-    res.status(200).json({ message: "Friend request sent successfully" });
+    res.status(200).json({
+      message: "Friend request sent successfully",
+      friendRequest: friend,
+    });
   } catch (error) {
     console.log("Error in fetching friend list", error);
     res.status(500).json({ error: "internal server error" });
@@ -206,10 +210,29 @@ const removeFriend = async (req, res) => {
       return res.status(400).json({ error: "Friendship not found" });
     }
 
+    if (friend.status === "pending") {
+      const notification = await Notification.findOne({
+        relatedItemModel: "FriendRequest",
+        sender: userId,
+        recipient: id,
+        type: "friend_request",
+      });
+      if (notification) {
+        await Notification.findOneAndDelete({
+          relatedItemModel: "FriendRequest",
+          sender: userId,
+          recipient: id,
+          type: "friend_request",
+        });
+      }
+      console.log("notification deleted", userId, id, notification);
+    }
+
     res.status(200).json({
       message: "Friend removed successfully",
       friendId: id,
       success: true,
+      friendRequest: friend,
     });
   } catch (error) {
     console.log("Error in fetching friend list", error);
@@ -297,6 +320,7 @@ const acceptFriendRequest = async (req, res) => {
           "accepted",
           friendId
         );
+        console.log("originalNotification", originalNotification);
       }
     } catch (notificationError) {
       console.error("Error updating notification:", notificationError);

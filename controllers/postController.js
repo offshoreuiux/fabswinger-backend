@@ -3,7 +3,7 @@ const PostLike = require("../models/post/PostLikeSchema");
 const PostWink = require("../models/post/PostWinkSchema");
 const PostHotlist = require("../models/post/PostHotlistSchema");
 const { v4: uuidv4 } = require("uuid");
-const s3 = require("../utils/s3");
+const { s3, getS3KeyFromUrl } = require("../utils/s3");
 const mongoose = require("mongoose");
 const NotificationService = require("../services/notificationService");
 const User = require("../models/UserSchema");
@@ -619,6 +619,21 @@ const deletePost = async (req, res) => {
         .json({ error: "Unauthorized to delete this post" });
     }
 
+    if (post.images.length > 0) {
+      await Promise.all(
+        post.images.map(async (image) => {
+          const key = getS3KeyFromUrl(image);
+          console.log("Deleting image", key);
+          await s3
+            .deleteObject({
+              Bucket: process.env.AWS_S3_BUCKET_NAME,
+              Key: key,
+            })
+            .promise();
+        })
+      );
+    }
+
     await Promise.all([
       Post.findByIdAndDelete(postId),
       PostLike.deleteMany({ postId }),
@@ -916,6 +931,23 @@ const unhotlistPost = async (req, res) => {
   }
 };
 
+const getPostsByUserId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+    const posts = await Post.find({ userId });
+    res.json({
+      message: "Posts fetched successfully",
+      posts,
+    });
+  } catch (error) {
+    console.error("Error in getPostsByUserId:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 module.exports = {
   createPost,
   getPosts,
@@ -926,4 +958,5 @@ module.exports = {
   unwinkPost,
   hotlistPost,
   unhotlistPost,
+  getPostsByUserId,
 };
