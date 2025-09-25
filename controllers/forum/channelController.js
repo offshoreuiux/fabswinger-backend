@@ -74,6 +74,7 @@ const getChannels = async (req, res) => {
 const getChannelById = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log("id", id);
 
     if (!id) {
       return res.status(400).json({
