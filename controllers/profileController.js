@@ -401,12 +401,11 @@ const getPublicProfileById = async (req, res) => {
   try {
     const { id } = req.params;
     const user = await User.findById(id).select("-password -email");
-    if (
-      !user ||
-      !user.settings.profileVisibility ||
-      !user.settings.nonMemberVisibility
-    ) {
+    if (!user) {
       return res.status(404).json({ error: "User not found" });
+    }
+    if (!user.settings.nonMemberVisibility) {
+      return res.status(404).json({ error: "User has his profile hidden" });
     }
     res.json({ user });
   } catch (error) {

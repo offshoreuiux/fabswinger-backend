@@ -3,7 +3,7 @@ const Channel = require("../../models/forum/ChannelSchema");
 const Member = require("../../models/forum/MemberSchema");
 const Like = require("../../models/forum/PostLikeSchema");
 const PostView = require("../../models/forum/PostViewSchema");
-const s3 = require("../../utils/s3");
+const { s3 } = require("../../utils/s3");
 const { v4: uuidv4 } = require("uuid");
 const NotificationService = require("../../services/notificationService");
 const Comment = require("../../models/forum/PostCommentSchema");
@@ -527,12 +527,14 @@ const addPostView = async (req, res) => {
 
     for (const postId of postIds) {
       // Check if user has already viewed this post
-      const existingView = await PostView.findOne({ postId, userId });
+      if (postId) {
+        const existingView = await PostView.findOne({ postId, userId });
 
-      if (!existingView) {
-        // Create new view record
-        await PostView.create({ postId, userId });
-        newViews.push(postId);
+        if (!existingView) {
+          // Create new view record
+          await PostView.create({ postId, userId });
+          newViews.push(postId);
+        }
       }
     }
 

@@ -223,6 +223,8 @@ const clearChat = async (req, res) => {
     }
     await Message.deleteMany({ chatId });
     chat.unreadCount.set(userId, 0);
+    chat.lastMessage = null;
+    chat.lastMessageTime = null;
     await chat.save();
     res.status(200).json(chat);
   } catch (error) {

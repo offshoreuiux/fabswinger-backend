@@ -3,7 +3,7 @@ const MeetHotlist = require("../../models/hotlist/MeetHotlistSchema");
 const MeetParticipant = require("../../models/meet/MeetParticipantSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");
-const s3 = require("../../utils/s3");
+const { s3 } = require("../../utils/s3");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 

@@ -1,7 +1,7 @@
 const Channel = require("../../models/forum/ChannelSchema");
 const Member = require("../../models/forum/MemberSchema");
 const { v4: uuidv4 } = require("uuid");
-const s3 = require("../../utils/s3");
+const { s3 } = require("../../utils/s3");
 
 const createChannel = async (req, res) => {
   try {

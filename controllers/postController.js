@@ -937,11 +937,41 @@ const getPostsByUserId = async (req, res) => {
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
     }
-    const posts = await Post.find({ userId });
-    res.json({
-      message: "Posts fetched successfully",
-      posts,
-    });
+    const posts = await Post.find({ userId }).lean();
+    // Separate media by inferring type from file extension in image URLs
+    // Treat common video extensions as videos; everything else stays as images
+    const videoExtensions = [
+      ".mp4",
+      ".mov",
+      ".avi",
+      ".mkv",
+      ".webm",
+      ".m4v",
+      ".3gp",
+    ];
+
+    const images = [];
+    const videos = [];
+
+    for (const post of posts) {
+      const mediaUrls = Array.isArray(post.images) ? post.images : [];
+      const hasAnyVideo = mediaUrls.some((url) => {
+        try {
+          const lower = String(url).toLowerCase();
+          return videoExtensions.some((ext) => lower.endsWith(ext));
+        } catch (_) {
+          return false;
+        }
+      });
+
+      if (hasAnyVideo) {
+        videos.push(post);
+      } else if (mediaUrls.length > 0) {
+        images.push(post);
+      }
+    }
+
+    res.json({ message: "Posts fetched successfully", images, videos });
   } catch (error) {
     console.error("Error in getPostsByUserId:", error);
     res.status(500).json({ error: "Internal server error" });

@@ -245,7 +245,8 @@ function initSocket(server) {
 
         // Emit to all chat members except sender
         chatMembers.forEach((memberId) => {
-          io.to(`user-${memberId}`).emit("new-message", newMessage);
+          console.log("chatMembers", memberId.toString());
+          io.to(`user-${memberId.toString()}`).emit("new-message", newMessage);
         });
 
         console.log(
@@ -409,6 +410,94 @@ function initSocket(server) {
 
     socket.on("stop-typing", ({ chatId, userId }) => {
       io.to(`user-${userId}`).emit("stop-typing", { chatId, userId });
+    });
+
+    // WebRTC signaling events
+    // Join an audio call for a chat. Not a room join, just notify members.
+    socket.on("webrtc-join-call", async ({ chatId, senderId }) => {
+      try {
+        if (!chatId || !senderId) return;
+        const chat = await Chat.findById(chatId).lean();
+        if (!chat) return;
+        const recipients = chat.members.filter(
+          (memberId) => memberId.toString() !== senderId
+        );
+        recipients.forEach((memberId) => {
+          io.to(`user-${memberId}`).emit("webrtc-participant-joined", {
+            chatId,
+            userId: senderId,
+          });
+        });
+      } catch (error) {
+        console.error("Error in webrtc-join-call:", error);
+      }
+    });
+
+    socket.on(
+      "webrtc-offer",
+      async ({ chatId, senderId, targetUserId, sdp }) => {
+        try {
+          if (!chatId || !senderId || !targetUserId || !sdp) return;
+          io.to(`user-${targetUserId}`).emit("webrtc-offer", {
+            chatId,
+            senderId,
+            sdp,
+          });
+        } catch (error) {
+          console.error("Error in webrtc-offer:", error);
+        }
+      }
+    );
+
+    socket.on(
+      "webrtc-answer",
+      async ({ chatId, senderId, targetUserId, sdp }) => {
+        try {
+          if (!chatId || !senderId || !targetUserId || !sdp) return;
+          io.to(`user-${targetUserId}`).emit("webrtc-answer", {
+            chatId,
+            senderId,
+            sdp,
+          });
+        } catch (error) {
+          console.error("Error in webrtc-answer:", error);
+        }
+      }
+    );
+
+    socket.on(
+      "webrtc-ice-candidate",
+      async ({ chatId, senderId, targetUserId, candidate }) => {
+        try {
+          if (!chatId || !senderId || !targetUserId || !candidate) return;
+          io.to(`user-${targetUserId}`).emit("webrtc-ice-candidate", {
+            chatId,
+            senderId,
+            candidate,
+          });
+        } catch (error) {
+          console.error("Error in webrtc-ice-candidate:", error);
+        }
+      }
+    );
+
+    socket.on("webrtc-leave-call", async ({ chatId, senderId }) => {
+      try {
+        if (!chatId || !senderId) return;
+        const chat = await Chat.findById(chatId).lean();
+        if (!chat) return;
+        const recipients = chat.members.filter(
+          (memberId) => memberId.toString() !== senderId
+        );
+        recipients.forEach((memberId) => {
+          io.to(`user-${memberId}`).emit("webrtc-participant-left", {
+            chatId,
+            userId: senderId,
+          });
+        });
+      } catch (error) {
+        console.error("Error in webrtc-leave-call:", error);
+      }
     });
 
     socket.on("disconnect", async () => {

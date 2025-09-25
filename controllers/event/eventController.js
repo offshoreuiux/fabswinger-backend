@@ -5,7 +5,7 @@ const User = require("../../models/UserSchema");
 const Friends = require("../../models/FriendRequestSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");
-const s3 = require("../../utils/s3");
+const {s3} = require("../../utils/s3");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 

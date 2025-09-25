@@ -12,7 +12,8 @@ const addMember = async (req, res) => {
     if (member) {
       return res.status(400).json({
         success: false,
-        message: "You are already a member of this channel",
+        message:
+          "You are already a member of this channel, you cannot join again",
       });
     }
     const newMember = await Member.create({
@@ -22,7 +23,7 @@ const addMember = async (req, res) => {
     });
     return res.status(201).json({
       success: true,
-      message: "You have been added to the channel",
+      message: "You have joined the channel",
       member: newMember,
       channel: newMember.channelId,
     });
@@ -50,13 +51,13 @@ const removeMember = async (req, res) => {
   if (member.role === "admin") {
     return res.status(400).json({
       success: false,
-      message: "You are the admin of this channel",
+      message: "You are the admin of this channel, you cannot leave",
     });
   }
   await member.deleteOne();
   return res.status(200).json({
     success: true,
-    message: "You have been removed from the channel",
+    message: "You have left the channel",
     channel: member.channelId,
   });
 };
