@@ -32,15 +32,15 @@ const signup = async (req, res) => {
     console.log("newUser", newUser);
 
     // Generate token with different expiration based on keepSignedIn preference
-    const tokenExpiration = keepSignedIn ? "30d" : "7d";
-    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
-      expiresIn: tokenExpiration,
-    });
+    // const tokenExpiration = keepSignedIn ? "30d" : "7d";
+    // const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
+    //   expiresIn: tokenExpiration,
+    // });
 
     res.status(201).json({
       success: true,
       message: "Signup successful",
-      token,
+      // token,       
       keepSignedIn: newUser.keepSignedIn,
       user: {
         id: newUser._id,

@@ -568,12 +568,47 @@ const getPosts = async (req, res) => {
         },
       },
       {
+        $lookup: {
+          from: "friends",
+          let: { postUserId: "$userId", currentUserId: currentUserIdObj },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $or: [
+                        {
+                          $and: [
+                            { $eq: ["$sender", "$$postUserId"] },
+                            { $eq: ["$receiver", "$$currentUserId"] },
+                          ],
+                        },
+                        {
+                          $and: [
+                            { $eq: ["$sender", "$$currentUserId"] },
+                            { $eq: ["$receiver", "$$postUserId"] },
+                          ],
+                        },
+                      ],
+                    },
+                    { $eq: ["$status", "accepted"] },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "friends",
+        },
+      },
+      {
         $addFields: {
           userId: { $arrayElemAt: ["$userInfo", 0] },
           likes: { $size: "$likes" },
           isLiked: { $gt: [{ $size: "$userLike" }, 0] },
           isWinked: { $gt: [{ $size: "$userWink" }, 0] },
           isHotlisted: { $gt: [{ $size: "$userHotlist" }, 0] },
+          isFriend: { $gt: [{ $size: "$friends" }, 0] },
         },
       },
       {

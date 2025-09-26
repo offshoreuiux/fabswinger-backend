@@ -377,11 +377,16 @@ const rejectFriendRequest = async (req, res) => {
       });
 
       if (originalNotification) {
-        await NotificationService.updateFriendRequestNotificationStatus(
-          originalNotification._id,
-          "rejected",
-          userId
-        );
+        // await NotificationService.updateFriendRequestNotificationStatus(
+        //   originalNotification._id,
+        //   "rejected",
+        //   userId
+        // );
+        await Notification.deleteOne({
+          type: "friend_request",
+          sender: friendId,
+          recipient: userId,
+        });
       }
     } catch (notificationError) {
       console.error("Error updating notification:", notificationError);
@@ -389,15 +394,15 @@ const rejectFriendRequest = async (req, res) => {
     }
 
     // Create notification for the person who sent the request
-    try {
-      await NotificationService.createFriendRequestRejectedNotification(
-        userId,
-        friendId
-      );
-    } catch (notificationError) {
-      console.error("Error creating notification:", notificationError);
-      // Don't fail the request if notification fails
-    }
+    // try {
+    //   await NotificationService.createFriendRequestRejectedNotification(
+    //     userId,
+    //     friendId
+    //   );
+    // } catch (notificationError) {
+    //   console.error("Error creating notification:", notificationError);
+    //   // Don't fail the request if notification fails
+    // }
 
     res.status(200).json({ message: "Friend request rejected successfully" });
   } catch (error) {

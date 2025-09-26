@@ -132,6 +132,7 @@ const getProfiles = async (req, res) => {
   try {
     const {
       limit = 10,
+      page = 1,
       lastId,
       search,
       gender,
@@ -186,6 +187,10 @@ const getProfiles = async (req, res) => {
       // isVerified: true,
     };
 
+    // Calculate skip for page-based pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Keep lastId support for backward compatibility
     if (lastId && mongoose.Types.ObjectId.isValid(lastId)) {
       query._id = { $lt: new mongoose.Types.ObjectId(lastId) };
     }
@@ -305,9 +310,13 @@ const getProfiles = async (req, res) => {
     // Only show profiles where profileVisibility is true
     query["settings.profileVisibility"] = true;
 
+    // Get total count for pagination info
+    const totalCount = await User.countDocuments(query);
+
     const profiles = await User.find(query)
       .select("-password -email ")
       .sort({ _id: -1 })
+      .skip(skip)
       .limit(parseInt(limit));
 
     // Get pending friend requests for each profile
@@ -346,10 +355,16 @@ const getProfiles = async (req, res) => {
       })
     );
 
+    const totalPages = Math.ceil(totalCount / parseInt(limit));
+    const currentPage = parseInt(page);
+
     res.json({
       profiles: profilesWithFriendRequests,
-      total: profilesWithFriendRequests.length,
-      hasMore: profilesWithFriendRequests.length === parseInt(limit),
+      total: totalCount,
+      currentPage: currentPage,
+      totalPages: totalPages,
+      hasMore: currentPage < totalPages,
+      limit: parseInt(limit),
     });
   } catch (error) {
     console.log("Error fetching profile list:", error);
