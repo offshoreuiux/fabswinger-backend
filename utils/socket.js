@@ -413,6 +413,58 @@ function initSocket(server) {
     });
 
     // WebRTC signaling events
+    // Send call invitation to chat members
+    socket.on(
+      "webrtc-call-invitation",
+      async ({ chatId, senderId, withVideo }) => {
+        try {
+          if (!chatId || !senderId) return;
+          const chat = await Chat.findById(chatId).lean();
+          if (!chat) return;
+          const recipients = chat.members.filter(
+            (memberId) => memberId.toString() !== senderId
+          );
+          recipients.forEach((memberId) => {
+            io.to(`user-${memberId}`).emit("webrtc-call-invitation", {
+              chatId,
+              senderId,
+              withVideo,
+            });
+          });
+        } catch (error) {
+          console.error("Error in webrtc-call-invitation:", error);
+        }
+      }
+    );
+
+    // Handle call response (accept/decline)
+    socket.on(
+      "webrtc-call-response",
+      async ({ chatId, senderId, accepted, withVideo }) => {
+        try {
+          if (!chatId || !senderId) return;
+          const chat = await Chat.findById(chatId).lean();
+          if (!chat) return;
+
+          // Find the original caller (the one who sent the invitation)
+          // We need to send the response back to all members except the responder
+          const recipients = chat.members.filter(
+            (memberId) => memberId.toString() !== senderId
+          );
+          recipients.forEach((memberId) => {
+            io.to(`user-${memberId}`).emit("webrtc-call-response", {
+              chatId,
+              senderId,
+              accepted,
+              withVideo,
+            });
+          });
+        } catch (error) {
+          console.error("Error in webrtc-call-response:", error);
+        }
+      }
+    );
+
     // Join an audio call for a chat. Not a room join, just notify members.
     socket.on("webrtc-join-call", async ({ chatId, senderId }) => {
       try {
