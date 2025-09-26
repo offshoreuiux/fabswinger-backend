@@ -94,11 +94,18 @@ function initSocket(server) {
         }
 
         // Validate message type
-        const validTypes = ["text", "image", "file", "audio", "video"];
+        const validTypes = [
+          "text",
+          "image",
+          "file",
+          "audio",
+          "video",
+          "call-status",
+        ];
         if (!validTypes.includes(type)) {
           socket.emit("message-error", {
             message:
-              "Invalid message type. Must be one of: text, image, file, audio, video",
+              "Invalid message type. Must be one of: text, image, file, audio, video, call-status",
           });
           return;
         }
