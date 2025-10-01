@@ -40,7 +40,7 @@ const signup = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Signup successful",
-      // token,       
+      // token,
       keepSignedIn: newUser.keepSignedIn,
       user: {
         id: newUser._id,
@@ -135,4 +135,77 @@ const verifyToken = async (req, res) => {
   }
 };
 
-module.exports = { signup, login, verifyToken };
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ error: "User not found" });
+    }
+    const code = Math.floor(100000 + Math.random() * 900000);
+    user.passwordResetCode = code;
+    await user.save();
+    res.json({ code });
+  } catch (error) {
+    res.status(500).json({ error: "Server error during forgot password" });
+  }
+};
+
+const verifyPasswordResetCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ error: "User not found", success: false });
+    }
+    if (user.passwordResetCode !== code) {
+      return res.status(400).json({ error: "Invalid code", success: false });
+    }
+    res.json({ message: "Code verified", success: true });
+  } catch (error) {
+    res.status(500).json({
+      error: "Server error during verify password reset code",
+      success: false,
+    });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    const user = await User.findOne({ email }).select("+password");
+    if (!user) {
+      return res.status(400).json({ error: "User not found", success: false });
+    }
+    // Prevent reusing the same password
+    const isSameAsOld = await bcrypt.compare(newPassword, user.password);
+    if (isSameAsOld) {
+      return res.status(400).json({
+        error: "New password cannot be the same as the old password",
+        success: false,
+      });
+    }
+    if (user.passwordResetCode !== code) {
+      return res.status(400).json({ error: "Invalid code", success: false });
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    user.passwordResetCode = null;
+    await user.save();
+    res.json({ message: "Password reset successfully", success: true });
+  } catch (error) {
+    res.status(500).json({
+      error: "Server error during reset password",
+      success: false,
+    });
+  }
+};
+
+module.exports = {
+  signup,
+  login,
+  verifyToken,
+  forgotPassword,
+  verifyPasswordResetCode,
+  resetPassword,
+};

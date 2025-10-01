@@ -385,13 +385,17 @@ class NotificationService {
         updateData = {
           type: "accepted",
           title: "Friend Request Accepted",
-          message: `You accepted <span class="text-sm font-semibold capitalize">${sender.nickname}</span> as your friend`,
+          message: `You accepted <span class="text-sm font-semibold capitalize">${
+            sender.nickname || sender.username
+          }</span> as your friend`,
         };
       } else if (newStatus === "rejected") {
         updateData = {
           type: "rejected",
           title: "Friend Request Declined",
-          message: `You declined <span class="text-sm font-semibold capitalize">${sender.nickname}</span> as your friend`,
+          message: `You declined <span class="text-sm font-semibold capitalize">${
+            sender.nickname || sender.username
+          }</span> as your friend`,
         };
       }
 

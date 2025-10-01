@@ -42,6 +42,7 @@ const createClubReview = async (req, res) => {
     const userId = req.user.userId;
     const newReview = new ClubReview({ clubId, userId, review, rating });
     await newReview.save();
+    await newReview.populate("userId", "username profileImage");
     res.status(201).json(newReview);
   } catch (error) {
     res.status(500).json({ message: error.message });

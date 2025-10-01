@@ -196,7 +196,8 @@ const getProfiles = async (req, res) => {
     }
 
     if (search) {
-      query.nickname = { $regex: search, $options: "i" };
+      const regex = { $regex: search, $options: "i" };
+      query.$or = [{ nickname: regex }, { username: regex }];
     }
 
     if (gender) {
@@ -363,7 +364,7 @@ const getProfiles = async (req, res) => {
       total: totalCount,
       currentPage: currentPage,
       totalPages: totalPages,
-      hasMore: currentPage < totalPages,
+      hasMore: parseInt(limit) === profilesWithFriendRequests.length,
       limit: parseInt(limit),
     });
   } catch (error) {

@@ -273,6 +273,10 @@ const userSchema = new mongoose.Schema(
         chatCameraVisibility: true,
       },
     },
+    passwordResetCode: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true, // auto add createdAt and updatedAt
@@ -287,6 +291,7 @@ userSchema.index({ nickname: 1 });
 userSchema.index({ email: 1 });
 userSchema.index({ geoLocation: "2dsphere" });
 
+userSchema.index({ passwordResetCode: 1 });
 // Virtual field to calculate age from DOB
 userSchema.virtual("age").get(function () {
   if (!this.dateOfBirth) return null;
