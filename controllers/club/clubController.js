@@ -4,6 +4,7 @@ const { s3 } = require("../../utils/s3");
 const { v4: uuidv4 } = require("uuid");
 const Event = require("../../models/event/EventSchema");
 const Meet = require("../../models/meet/MeetSchema");
+const ClubReview = require("../../models/club/ClubReviewSchema");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -182,8 +183,33 @@ const getClubs = async (req, res) => {
             region: { $regex: location, $options: "i" },
           },
         },
+        {
+          $lookup: {
+            from: "clubreviews",
+            localField: "_id",
+            foreignField: "clubId",
+            as: "reviews",
+          },
+        },
+        {
+          $addFields: {
+            rating: {
+              $round: [
+                {
+                  $cond: [
+                    { $gt: [{ $size: "$reviews" }, 0] },
+                    { $avg: "$reviews.rating" },
+                    0,
+                  ],
+                },
+                1,
+              ],
+            },
+          },
+        },
         { $skip: skip },
         { $limit: parseInt(limit) },
+        { $project: { reviews: 0 } },
       ]);
 
       totalCount = await Club.countDocuments({
@@ -246,12 +272,32 @@ const getClubs = async (req, res) => {
               $size: { $ifNull: ["$upcomingEvents", []] },
             },
             upcomingMeetsCount: { $size: { $ifNull: ["$upcomingMeets", []] } },
+            reviewCount: { $size: { $ifNull: ["$reviews", []] } },
           },
         },
         {
           $addFields: {
             totalUpcoming: {
               $add: ["$upcomingEventsCount", "$upcomingMeetsCount"],
+            },
+            averageRating: {
+              $cond: {
+                if: { $gt: [{ $size: "$reviews" }, 0] },
+                then: { $avg: "$reviews.rating" },
+                else: 0,
+              },
+            },
+            rating: {
+              $round: [
+                {
+                  $cond: [
+                    { $gt: [{ $size: "$reviews" }, 0] },
+                    { $avg: "$reviews.rating" },
+                    0,
+                  ],
+                },
+                1,
+              ],
             },
           },
         },
@@ -262,6 +308,8 @@ const getClubs = async (req, res) => {
           $project: {
             upcomingEvents: 0,
             upcomingMeets: 0,
+            reviews: 0,
+            averageRating: 0,
           },
         },
       ];
@@ -295,6 +343,18 @@ const getClubs = async (req, res) => {
               },
             },
             reviewCount: { $size: "$reviews" },
+            rating: {
+              $round: [
+                {
+                  $cond: [
+                    { $gt: [{ $size: "$reviews" }, 0] },
+                    { $avg: "$reviews.rating" },
+                    0,
+                  ],
+                },
+                1,
+              ],
+            },
           },
         },
         {
@@ -309,6 +369,12 @@ const getClubs = async (req, res) => {
         },
         { $skip: skip },
         { $limit: parseInt(limit) },
+        {
+          $project: {
+            reviews: 0,
+            averageRating: 0,
+          },
+        },
       ];
 
       clubs = await Club.aggregate(pipeline);
@@ -361,6 +427,23 @@ const getClubs = async (req, res) => {
           },
         })
         .populate({ path: "meets" });
+
+      // Attach averaged rating (one decimal) for these clubs
+      const clubIds = clubs.map((c) => c._id);
+      if (clubIds.length > 0) {
+        const ratingAgg = await ClubReview.aggregate([
+          { $match: { clubId: { $in: clubIds } } },
+          { $group: { _id: "$clubId", avg: { $avg: "$rating" } } },
+        ]);
+        const idToRating = new Map(
+          ratingAgg.map((r) => [String(r._id), Math.round(r.avg * 10) / 10])
+        );
+        clubs = clubs.map((c) => {
+          const obj = c.toObject ? c.toObject() : c;
+          obj.rating = idToRating.get(String(c._id)) || 0;
+          return obj;
+        });
+      }
     }
 
     res.status(200).json({
@@ -556,6 +639,18 @@ const getClubById = async (req, res) => {
           select: "username profileImage",
         },
       });
+
+    const reviews = await ClubReview.find({ clubId: id });
+    let averageRating = 0;
+    if (reviews.length > 0) {
+      const totalRating = reviews.reduce(
+        (acc, review) => acc + review.rating,
+        0
+      );
+      averageRating = Math.round((totalRating / reviews.length) * 10) / 10; // one decimal place
+    }
+    club.rating = averageRating;
+
     res.status(200).json({ club });
   } catch (error) {
     res
