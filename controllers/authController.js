@@ -263,19 +263,24 @@ const forgotPassword = async (req, res) => {
       // service: "gmail",
       host: "smtp.gmail.com",
       port: 587,
-      secure: true,
+      secure: false,
       auth: {
         user: SMTP_USER,
         pass: SMTP_PASS,
       },
     });
 
+    // console.log("transporter", transporter);
+    console.log("Sending email to ======================>>>>>", SMTP_USER);
+
     const mailOptions = {
-      from: process.env.SMTP_USER,
+      from: SMTP_USER,
       to: email,
       subject: "Password Reset Code - VerifiedSwingers",
       html: generatePasswordResetEmail(code),
     };
+
+    console.log("mailOptions", mailOptions);
 
     await transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
