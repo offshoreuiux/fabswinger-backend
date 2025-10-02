@@ -1,10 +1,99 @@
 const User = require("../models/UserSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const nodemailer = require("nodemailer");
+const { generatePasswordResetEmail } = require("../utils/emailTemplates");
+
+// Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
+const fetch = globalThis.fetch || require("node-fetch");
+
+// reCAPTCHA verification function
+const verifyRecaptcha = async (recaptchaToken) => {
+  try {
+    const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+    console.log(
+      "secretKey",
+      secretKey ? "exists" : "missing",
+      "recaptchaToken",
+      recaptchaToken ? "exists" : "missing"
+    );
+
+    if (!secretKey) {
+      console.log("RECAPTCHA_SECRET_KEY not found, skipping verification");
+      return true; // Skip verification in development
+    }
+
+    if (!recaptchaToken) {
+      console.log("No reCAPTCHA token provided");
+      return false;
+    }
+
+    // Check if fetch is available
+    if (typeof fetch !== "function") {
+      console.error("Fetch is not available");
+      return false;
+    }
+
+    const response = await fetch(
+      "https://www.google.com/recaptcha/api/siteverify",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: `secret=${secretKey}&response=${recaptchaToken}`,
+      }
+    );
+
+    if (!response.ok) {
+      console.error(
+        "reCAPTCHA API response not ok:",
+        response.status,
+        response.statusText
+      );
+      return false;
+    }
+
+    const data = await response.json();
+    console.log("reCAPTCHA response:", data);
+
+    if (data.success) {
+      console.log("reCAPTCHA verification successful");
+      return true;
+    } else {
+      console.log("reCAPTCHA verification failed:", data["error-codes"]);
+      return false;
+    }
+  } catch (error) {
+    console.error("reCAPTCHA verification error:", error);
+    return false;
+  }
+};
 
 const signup = async (req, res) => {
   try {
-    const { username, email, password, keepSignedIn, geoLocation } = req.body;
+    const {
+      username,
+      email,
+      password,
+      keepSignedIn,
+      geoLocation,
+      recaptchaToken,
+    } = req.body;
+
+    // Verify reCAPTCHA token
+    if (recaptchaToken) {
+      const isRecaptchaValid = await verifyRecaptcha(recaptchaToken);
+      if (!isRecaptchaValid) {
+        return res.status(400).json({
+          error: "reCAPTCHA verification failed. Please try again.",
+        });
+      }
+    } else {
+      return res.status(400).json({
+        error: "reCAPTCHA verification is required.",
+      });
+    }
 
     // Check if email already exists
     const existingEmail = await User.findOne({ email });
@@ -32,15 +121,15 @@ const signup = async (req, res) => {
     console.log("newUser", newUser);
 
     // Generate token with different expiration based on keepSignedIn preference
-    // const tokenExpiration = keepSignedIn ? "30d" : "7d";
-    // const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
-    //   expiresIn: tokenExpiration,
-    // });
+    const tokenExpiration = keepSignedIn ? "30d" : "7d";
+    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
+      expiresIn: tokenExpiration,
+    });
 
     res.status(201).json({
       success: true,
       message: "Signup successful",
-      // token,
+      token,
       keepSignedIn: newUser.keepSignedIn,
       user: {
         id: newUser._id,
@@ -58,7 +147,18 @@ const signup = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { username, password, keepSignedIn, geoLocation } = req.body;
+    const { username, password, keepSignedIn, geoLocation, recaptchaToken } =
+      req.body;
+
+    // Verify reCAPTCHA token if provided (optional for login)
+    if (recaptchaToken) {
+      const isRecaptchaValid = await verifyRecaptcha(recaptchaToken);
+      if (!isRecaptchaValid) {
+        return res.status(400).json({
+          error: "reCAPTCHA verification failed. Please try again.",
+        });
+      }
+    }
 
     // Check if username or email is provided
     if (!username) {
@@ -95,7 +195,17 @@ const login = async (req, res) => {
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
       expiresIn: tokenExpiration,
     });
-    user.geoLocation = geoLocation;
+    // Only save geoLocation if it is a valid GeoJSON Point
+    if (
+      geoLocation &&
+      geoLocation.type === "Point" &&
+      Array.isArray(geoLocation.coordinates) &&
+      geoLocation.coordinates.length === 2 &&
+      Number.isFinite(geoLocation.coordinates[0]) &&
+      Number.isFinite(geoLocation.coordinates[1])
+    ) {
+      user.geoLocation = geoLocation;
+    }
     await user.save();
 
     res.json({
@@ -145,6 +255,33 @@ const forgotPassword = async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000);
     user.passwordResetCode = code;
     await user.save();
+
+    const transporter = nodemailer.createTransport({
+      // service: "gmail",
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.SMTP_USER,
+      to: email,
+      subject: "Password Reset Code - VerifiedSwingers",
+      html: generatePasswordResetEmail(code),
+    };
+
+    await transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log(error);
+      } else {
+        console.log("Email sent: " + info.response);
+      }
+    });
+
     res.json({ code });
   } catch (error) {
     res.status(500).json({ error: "Server error during forgot password" });
@@ -158,7 +295,7 @@ const verifyPasswordResetCode = async (req, res) => {
     if (!user) {
       return res.status(400).json({ error: "User not found", success: false });
     }
-    if (user.passwordResetCode !== code) {
+    if (user.passwordResetCode != code) {
       return res.status(400).json({ error: "Invalid code", success: false });
     }
     res.json({ message: "Code verified", success: true });
@@ -185,7 +322,7 @@ const resetPassword = async (req, res) => {
         success: false,
       });
     }
-    if (user.passwordResetCode !== code) {
+    if (user.passwordResetCode != code) {
       return res.status(400).json({ error: "Invalid code", success: false });
     }
     const hashedPassword = await bcrypt.hash(newPassword, 10);
