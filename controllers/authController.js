@@ -256,14 +256,17 @@ const forgotPassword = async (req, res) => {
     user.passwordResetCode = code;
     await user.save();
 
+    let SMTP_USER = "partners@verifiedswingers.co.uk";
+    let SMTP_PASS = "scjtjupyoehbdlou";
+
     const transporter = nodemailer.createTransport({
       // service: "gmail",
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: false,
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: true,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: SMTP_USER,
+        pass: SMTP_PASS,
       },
     });
 
