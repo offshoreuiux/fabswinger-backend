@@ -2,10 +2,17 @@ const User = require("../models/UserSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
-const transporter = require("../utils/transporter");
+const { getTransporter } = require("../utils/transporter");
 
-// Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
-const fetch = globalThis.fetch || require("node-fetch");
+// Import fetch - use global fetch for Node.js 18+ or dynamic import for node-fetch
+let fetch;
+if (globalThis.fetch) {
+  fetch = globalThis.fetch;
+} else {
+  // Dynamic import for node-fetch v3 (ES module)
+  fetch = (...args) =>
+    import("node-fetch").then(({ default: fetch }) => fetch(...args));
+}
 
 // reCAPTCHA verification function
 const verifyRecaptcha = async (recaptchaToken) => {
@@ -257,13 +264,18 @@ const forgotPassword = async (req, res) => {
       html: generatePasswordResetEmail(code),
     };
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.log("error", error);
-      } else {
-        console.log("Email sent: ", info.response);
-      }
-    });
+    const transporter = getTransporter();
+    if (transporter) {
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+          console.log("error", error);
+        } else {
+          console.log("Email sent: ", info.response);
+        }
+      });
+    } else {
+      console.error("Email transporter not available");
+    }
 
     res.json({ code });
   } catch (error) {
