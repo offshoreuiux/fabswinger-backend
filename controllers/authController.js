@@ -2,17 +2,11 @@ const User = require("../models/UserSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
-const { getTransporter } = require("../utils/transporter");
+const transporter = require("../utils/transporter");
+const nodemailer = require("nodemailer");
 
-// Import fetch - use global fetch for Node.js 18+ or dynamic import for node-fetch
-let fetch;
-if (globalThis.fetch) {
-  fetch = globalThis.fetch;
-} else {
-  // Dynamic import for node-fetch v3 (ES module)
-  fetch = (...args) =>
-    import("node-fetch").then(({ default: fetch }) => fetch(...args));
-}
+// Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
+const fetch = globalThis.fetch || require("node-fetch");
 
 // reCAPTCHA verification function
 const verifyRecaptcha = async (recaptchaToken) => {
@@ -248,6 +242,43 @@ const verifyToken = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   try {
+    // ./mail.js
+
+    nodemailer.createTestAccount((err, account) => {
+      if (err) {
+        console.error("Failed to create a testing account. " + err.message);
+        return;
+      }
+
+      // 1️⃣  Configure a transporter that talks to Ethereal
+      const transporter = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false, // upgrade later with STARTTLS
+        auth: {
+          user: account.user, // generated user
+          pass: account.pass, // generated password
+        },
+      });
+
+      // 2️⃣  Send a message
+      transporter
+        .sendMail({
+          from: "Example app <no-reply@example.com>",
+          to: "test123@yopmail.com",
+          subject: "Hello from tests ✔",
+          text: "This message was sent from a Node.js integration test.",
+        })
+        .then((info) => {
+          console.log("Message sent: %s", info.messageId);
+          // Preview the stored message in Ethereal’s web UI
+          console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
+        })
+        .catch(console.error);
+    });
+
+    return res.status(200).json({ message: "Forgot password" });
+
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user) {
@@ -264,18 +295,13 @@ const forgotPassword = async (req, res) => {
       html: generatePasswordResetEmail(code),
     };
 
-    const transporter = getTransporter();
-    if (transporter) {
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-          console.log("error", error);
-        } else {
-          console.log("Email sent: ", info.response);
-        }
-      });
-    } else {
-      console.error("Email transporter not available");
-    }
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.log("error", error);
+      } else {
+        console.log("Email sent: ", info.response);
+      }
+    });
 
     res.json({ code });
   } catch (error) {
