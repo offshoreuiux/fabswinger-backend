@@ -260,13 +260,23 @@ const forgotPassword = async (req, res) => {
       html: generatePasswordResetEmail(code),
     };
 
-    transporter.sendMail(mailOptions, (error, info) => {
-      if (error) {
-        console.log("error", error);
-      } else {
-        console.log("Email sent: ", info.response);
-      }
-    });
+    if (transporter) {
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+          console.log("Email error:", error);
+        } else {
+          console.log("Email sent: ", info.response);
+        }
+      });
+    } else {
+      console.log(
+        "Email transporter not available. Password reset code:",
+        code
+      );
+      console.log(
+        "Please set up email configuration in environment variables."
+      );
+    }
 
     res.json({ code });
   } catch (error) {
