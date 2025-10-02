@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const nodemailer = require("nodemailer");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
+const { transporter } = require("../utils/transporter");
 
 // Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
 const fetch = globalThis.fetch || require("node-fetch");
@@ -257,18 +258,18 @@ const forgotPassword = async (req, res) => {
     await user.save();
 
     let SMTP_USER = "partners@verifiedswingers.co.uk";
-    let SMTP_PASS = "scjtjupyoehbdlou";
+    // let SMTP_PASS = "scjtjupyoehbdlou";
 
-    const transporter = nodemailer.createTransport({
-      // service: "gmail",
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-    });
+    // const transporter = nodemailer.createTransport({
+    //   // service: "gmail",
+    //   host: "smtp.gmail.com",
+    //   port: 587,
+    //   secure: false,
+    //   auth: {
+    //     user: SMTP_USER,
+    //     pass: SMTP_PASS,
+    //   },
+    // });
 
     // console.log("transporter", transporter);
     console.log("Sending email to ======================>>>>>", SMTP_USER);
