@@ -1,40 +1,33 @@
 const User = require("../models/UserSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
-const nodemailer = require("nodemailer");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
-const { transporter } = require("../utils/transporter");
+const transporter = require("../utils/transporter");
 
 // Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
 const fetch = globalThis.fetch || require("node-fetch");
 
 // reCAPTCHA verification function
 const verifyRecaptcha = async (recaptchaToken) => {
+  const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+  console.log("secretKey", secretKey, recaptchaToken);
+
+  if (!secretKey) {
+    console.log("RECAPTCHA_SECRET_KEY not found, skipping verification");
+    return true; // Skip verification in development
+  }
+
+  if (!recaptchaToken) {
+    console.log("No reCAPTCHA token provided");
+    return false;
+  }
+
+  // Check if fetch is available
+  if (typeof fetch !== "function") {
+    console.error("Fetch is not available");
+    return false;
+  }
   try {
-    const secretKey = process.env.RECAPTCHA_SECRET_KEY;
-    console.log(
-      "secretKey",
-      secretKey ? "exists" : "missing",
-      "recaptchaToken",
-      recaptchaToken ? "exists" : "missing"
-    );
-
-    if (!secretKey) {
-      console.log("RECAPTCHA_SECRET_KEY not found, skipping verification");
-      return true; // Skip verification in development
-    }
-
-    if (!recaptchaToken) {
-      console.log("No reCAPTCHA token provided");
-      return false;
-    }
-
-    // Check if fetch is available
-    if (typeof fetch !== "function") {
-      console.error("Fetch is not available");
-      return false;
-    }
-
     const response = await fetch(
       "https://www.google.com/recaptcha/api/siteverify",
       {
@@ -257,37 +250,18 @@ const forgotPassword = async (req, res) => {
     user.passwordResetCode = code;
     await user.save();
 
-    let SMTP_USER = "partners@verifiedswingers.co.uk";
-    // let SMTP_PASS = "scjtjupyoehbdlou";
-
-    // const transporter = nodemailer.createTransport({
-    //   // service: "gmail",
-    //   host: "smtp.gmail.com",
-    //   port: 587,
-    //   secure: false,
-    //   auth: {
-    //     user: SMTP_USER,
-    //     pass: SMTP_PASS,
-    //   },
-    // });
-
-    // console.log("transporter", transporter);
-    console.log("Sending email to ======================>>>>>", SMTP_USER);
-
     const mailOptions = {
-      from: SMTP_USER,
+      from: process.env.SMTP_USER,
       to: email,
       subject: "Password Reset Code - VerifiedSwingers",
       html: generatePasswordResetEmail(code),
     };
 
-    console.log("mailOptions", mailOptions);
-
-    await transporter.sendMail(mailOptions, (error, info) => {
+    transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
-        console.log(error);
+        console.log("error", error);
       } else {
-        console.log("Email sent: " + info.response);
+        console.log("Email sent: ", info.response);
       }
     });
 
