@@ -244,41 +244,6 @@ const forgotPassword = async (req, res) => {
   try {
     // ./mail.js
 
-    nodemailer.createTestAccount((err, account) => {
-      if (err) {
-        console.error("Failed to create a testing account. " + err.message);
-        return;
-      }
-
-      // 1️⃣  Configure a transporter that talks to Ethereal
-      const transporter = nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false, // upgrade later with STARTTLS
-        auth: {
-          user: account.user, // generated user
-          pass: account.pass, // generated password
-        },
-      });
-
-      // 2️⃣  Send a message
-      transporter
-        .sendMail({
-          from: "Example app <no-reply@example.com>",
-          to: "test123@yopmail.com",
-          subject: "Hello from tests ✔",
-          text: "This message was sent from a Node.js integration test.",
-        })
-        .then((info) => {
-          console.log("Message sent: %s", info.messageId);
-          // Preview the stored message in Ethereal’s web UI
-          console.log("Preview URL: %s", nodemailer.getTestMessageUrl(info));
-        })
-        .catch(console.error);
-    });
-
-    return res.status(200).json({ message: "Forgot password" });
-
     const { email } = req.body;
     const user = await User.findOne({ email });
     if (!user) {
