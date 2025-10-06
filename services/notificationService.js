@@ -441,10 +441,10 @@ class NotificationService {
     eventTitle
   ) {
     try {
-      const eventCreator = await User.findById(eventCreatorId).select(
+      const applicant = await User.findById(applicantId).select(
         "nickname username profileImage"
       );
-      if (!eventCreator) throw new Error("Event creator not found");
+      if (!applicant) throw new Error("Applicant not found");
 
       const notificationData = {
         recipient: eventCreatorId,
@@ -452,7 +452,7 @@ class NotificationService {
         type: "event_application",
         title: "New Event Application",
         message: `<span class="text-sm font-semibold capitalize">${
-          eventCreator.nickname || eventCreator.username
+          applicant.nickname || applicant.username
         }</span> applied to join your event "${eventTitle}"`,
         relatedItem: eventId,
         relatedItemModel: "Event",

@@ -149,21 +149,6 @@ const getProfiles = async (req, res) => {
     );
     const userCoordinates = currentUser?.geoLocation?.coordinates;
 
-    // Get the current user's friend IDs (both sent and received)
-    const userFriendships = await Friends.find({
-      $or: [{ sender: loggedInUserId }, { receiver: loggedInUserId }],
-      status: { $in: ["accepted"] }, // Include both accepted and pending requests
-    });
-
-    // Extract friend IDs from friendships
-    const friendIds = userFriendships.map((friendship) => {
-      if (friendship.sender.toString() === loggedInUserId) {
-        return friendship.receiver.toString();
-      } else {
-        return friendship.sender.toString();
-      }
-    });
-
     // Get blocked users (both directions)
     const blockedUsers = await Friends.find({
       $or: [{ sender: loggedInUserId }, { receiver: loggedInUserId }],
@@ -179,7 +164,7 @@ const getProfiles = async (req, res) => {
     });
 
     // Add current user, friends, and blocked users to exclusion list
-    const excludeIds = [loggedInUserId, ...friendIds, ...blockedIds];
+    const excludeIds = [loggedInUserId, ...blockedIds];
 
     const query = {
       _id: { $nin: excludeIds },
@@ -351,6 +336,16 @@ const getProfiles = async (req, res) => {
         } else {
           profileWithRequest.friendRequest = null;
         }
+
+        // Check if the user and this profile are already friends
+        const acceptedFriendship = await Friends.findOne({
+          $or: [
+            { sender: loggedInUserId, receiver: profile._id },
+            { sender: profile._id, receiver: loggedInUserId },
+          ],
+          status: "accepted",
+        });
+        profileWithRequest.isFriend = Boolean(acceptedFriendship);
 
         return profileWithRequest;
       })
