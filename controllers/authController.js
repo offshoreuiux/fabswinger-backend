@@ -2,7 +2,7 @@ const User = require("../models/UserSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
-const { transporter, sendEmailWithRetry } = require("../utils/transporter");
+const transporter = require("../utils/transporter");
 const nodemailer = require("nodemailer");
 
 // Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
@@ -260,13 +260,22 @@ const forgotPassword = async (req, res) => {
       html: generatePasswordResetEmail(code),
     };
 
-    // Use enhanced email sending with retry mechanism
-    const emailResult = await sendEmailWithRetry(mailOptions);
-
-    if (!emailResult.success) {
-      console.log("❌ Failed to send password reset email:", emailResult.error);
-      console.log("🔑 Password reset code for manual use:", code);
-      console.log("💡 User can use this code to reset their password");
+    if (transporter) {
+      transporter.sendMail(mailOptions, (error, info) => {
+        if (error) {
+          console.log("Email error:", error);
+        } else {
+          console.log("Email sent: ", info.response);
+        }
+      });
+    } else {
+      console.log(
+        "Email transporter not available. Password reset code:",
+        code
+      );
+      console.log(
+        "Please set up email configuration in environment variables."
+      );
     }
 
     res.json({ code });
