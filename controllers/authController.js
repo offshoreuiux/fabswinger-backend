@@ -261,10 +261,26 @@ const forgotPassword = async (req, res) => {
     };
 
     // Use enhanced email sending with retry mechanism
-    const emailResult = await sendEmailWithRetry(mailOptions);
+    // const emailResult = await sendEmailWithRetry(mailOptions);
 
-    if (!emailResult.success) {
-      console.log("❌ Failed to send password reset email:", emailResult.error);
+    const MAILTRAP_API_TOKEN = process.env.MAILTRAP_API_TOKEN;
+
+    const res = await fetch("https://send.api.mailtrap.io/api/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${MAILTRAP_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: { email: process.env.SMTP_USER },
+        to: [{ email: email }],
+        subject: "Password Reset Code - VerifiedSwingers",
+        html: generatePasswordResetEmail(code),
+      }),
+    });
+
+    if (!res.success) {
+      console.log("❌ Failed to send password reset email:", res.error);
       console.log("🔑 Password reset code for manual use:", code);
       console.log("💡 User can use this code to reset their password");
     }
