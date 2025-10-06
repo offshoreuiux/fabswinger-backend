@@ -3,31 +3,37 @@ const dotenv = require("dotenv");
 const { google } = require("googleapis");
 dotenv.config();
 
-const oAuth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  "https://developers.google.com/oauthplayground"
-);
+let transporter = null;
 
-oAuth2Client.setCredentials({
-  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-});
+const hasGmailOauth =
+  process.env.EMAIL_USER &&
+  process.env.GOOGLE_CLIENT_ID &&
+  process.env.GOOGLE_CLIENT_SECRET &&
+  process.env.GOOGLE_REFRESH_TOKEN;
 
-const accessToken = oAuth2Client.getAccessToken();
-
-// Create reusable transporter object using SMTP transport
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    type: "OAuth2",
-    user: process.env.EMAIL_USER,
-    clientId: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
-    accessToken: accessToken.token,
-  },
-});
+if (hasGmailOauth) {
+  // Create transporter using Gmail OAuth2. accessToken is optional; Nodemailer will fetch it using refreshToken.
+  transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      type: "OAuth2",
+      user: process.env.EMAIL_USER,
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      refreshToken: process.env.GOOGLE_REFRESH_TOKEN,
+    },
+    connectionTimeout: 20000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 50,
+  });
+} else {
+  console.log(
+    "⚠️  Gmail OAuth2 env vars missing; email transporter not configured"
+  );
+}
 
 // const transporter = nodemailer.createTransport({
 //   service: "gmail",
@@ -49,14 +55,15 @@ const transporter = nodemailer.createTransport({
 //   },
 // });
 
-// Verify transporter configuration
-
-transporter.verify(function (error, success) {
-  if (error) {
-    console.log("Email transporter error:", error);
-  } else {
-    console.log("Email server is ready to send messages");
-  }
-});
+// Verify transporter configuration (skip in production to avoid cloud SMTP timeouts)
+if (transporter && process.env.NODE_ENV !== "production") {
+  transporter.verify(function (error, success) {
+    if (error) {
+      console.log("Email transporter error:", error);
+    } else {
+      console.log("Email server is ready to send messages");
+    }
+  });
+}
 
 module.exports = transporter;
