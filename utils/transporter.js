@@ -3,17 +3,17 @@ const dotenv = require("dotenv");
 // const { google } = require("googleapis");
 dotenv.config();
 
-// const oAuth2Client = new google.auth.OAuth2(
-//   process.env.GOOGLE_CLIENT_ID,
-//   process.env.GOOGLE_CLIENT_SECRET,
-//   "https://developers.google.com/oauthplayground"
-// );
+const oAuth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  "https://developers.google.com/oauthplayground"
+);
 
-// oAuth2Client.setCredentials({
-//   refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-// });
+oAuth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+});
 
-// const accessToken = await oAuth2Client.getAccessToken();
+const accessToken = await oAuth2Client.getAccessToken();
 
 // Create reusable transporter object using SMTP transport
 
