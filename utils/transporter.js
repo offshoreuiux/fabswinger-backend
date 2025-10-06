@@ -2,12 +2,45 @@ const nodemailer = require("nodemailer");
 const dotenv = require("dotenv");
 dotenv.config();
 
+// Import email service APIs
+const { Resend } = require("resend");
+const sgMail = require("@sendgrid/mail");
+
 // Create transporter with multiple fallback options
 let transporter;
 let isVerifying = false;
 
+// Detect platform and initialize email services
+const isCloudPlatform =
+  process.env.VERCEL ||
+  process.env.RENDER ||
+  process.env.NODE_ENV === "production";
+let resendClient = null;
+let sendGridInitialized = false;
+
+// Initialize Resend (works great with Vercel)
+if (process.env.RESEND_API_KEY) {
+  resendClient = new Resend(process.env.RESEND_API_KEY);
+  console.log("📧 Resend email service initialized");
+}
+
+// Initialize SendGrid
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  sendGridInitialized = true;
+  console.log("📧 SendGrid email service initialized");
+}
+
 const createTransporter = () => {
-  // Try different email configurations in order of preference
+  // Skip SMTP on cloud platforms that block it
+  if (isCloudPlatform) {
+    console.log(
+      "☁️  Cloud platform detected - using email service APIs instead of SMTP"
+    );
+    return null; // We'll use API services instead
+  }
+
+  // Try different email configurations in order of preference (for local development)
   const configs = [
     // 1. Gmail with App Password (most reliable for production)
     {
@@ -120,6 +153,19 @@ transporter = createTransporter();
 
 // Enhanced verification with retry mechanism
 const verifyTransporterWithRetry = async (retries = 3, delay = 5000) => {
+  // Skip verification on cloud platforms - we'll use API services
+  if (isCloudPlatform) {
+    if (resendClient || sendGridInitialized) {
+      console.log("✅ Email service APIs ready for cloud platform");
+    } else {
+      console.log("⚠️  No email service API configured for cloud platform");
+      console.log(
+        "💡 Set RESEND_API_KEY or SENDGRID_API_KEY environment variable"
+      );
+    }
+    return;
+  }
+
   if (!transporter || isVerifying) {
     return;
   }
@@ -186,6 +232,12 @@ if (transporter) {
 
 // Enhanced email sending function with retry and fallback
 const sendEmailWithRetry = async (mailOptions, retries = 2) => {
+  // Use email service APIs on cloud platforms
+  if (isCloudPlatform) {
+    return await sendEmailViaAPI(mailOptions, retries);
+  }
+
+  // Use SMTP for local development
   if (!transporter) {
     console.log("❌ No email transporter available");
     return { success: false, error: "No email transporter configured" };
@@ -193,7 +245,9 @@ const sendEmailWithRetry = async (mailOptions, retries = 2) => {
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      console.log(`📧 Sending email (attempt ${attempt}/${retries})...`);
+      console.log(
+        `📧 Sending email via SMTP (attempt ${attempt}/${retries})...`
+      );
 
       const result = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -210,7 +264,7 @@ const sendEmailWithRetry = async (mailOptions, retries = 2) => {
         });
       });
 
-      console.log("✅ Email sent successfully:", result.messageId);
+      console.log("✅ Email sent successfully via SMTP:", result.messageId);
       return {
         success: true,
         messageId: result.messageId,
@@ -218,17 +272,96 @@ const sendEmailWithRetry = async (mailOptions, retries = 2) => {
       };
     } catch (error) {
       console.log(
-        `❌ Email send failed (attempt ${attempt}/${retries}):`,
+        `❌ SMTP email send failed (attempt ${attempt}/${retries}):`,
         error.message
       );
 
       if (attempt === retries) {
-        console.log("⚠️  All email send attempts failed");
+        console.log("⚠️  All SMTP email send attempts failed");
         return { success: false, error: error.message };
       } else {
         // Wait before retry with exponential backoff
         const delay = 2000 * Math.pow(2, attempt - 1);
-        console.log(`⏳ Retrying email send in ${delay / 1000} seconds...`);
+        console.log(
+          `⏳ Retrying SMTP email send in ${delay / 1000} seconds...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+};
+
+// Send email via API services (for cloud platforms)
+const sendEmailViaAPI = async (mailOptions, retries = 2) => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(
+        `📧 Sending email via API (attempt ${attempt}/${retries})...`
+      );
+
+      // Try Resend first (works great with Vercel)
+      if (resendClient) {
+        try {
+          const result = await resendClient.emails.send({
+            from:
+              mailOptions.from ||
+              process.env.RESEND_FROM_EMAIL ||
+              "noreply@yourdomain.com",
+            to: mailOptions.to,
+            subject: mailOptions.subject,
+            html: mailOptions.html,
+          });
+
+          console.log(
+            "✅ Email sent successfully via Resend:",
+            result.data?.id
+          );
+          return {
+            success: true,
+            messageId: result.data?.id,
+            service: "resend",
+          };
+        } catch (resendError) {
+          console.log("❌ Resend failed, trying SendGrid...");
+          throw resendError;
+        }
+      }
+
+      // Try SendGrid as fallback
+      if (sendGridInitialized) {
+        const msg = {
+          to: mailOptions.to,
+          from:
+            mailOptions.from ||
+            process.env.SENDGRID_FROM_EMAIL ||
+            "noreply@yourdomain.com",
+          subject: mailOptions.subject,
+          html: mailOptions.html,
+        };
+
+        const result = await sgMail.send(msg);
+        console.log("✅ Email sent successfully via SendGrid");
+        return {
+          success: true,
+          messageId: result[0]?.headers?.["x-message-id"],
+          service: "sendgrid",
+        };
+      }
+
+      throw new Error("No email service API configured");
+    } catch (error) {
+      console.log(
+        `❌ API email send failed (attempt ${attempt}/${retries}):`,
+        error.message
+      );
+
+      if (attempt === retries) {
+        console.log("⚠️  All API email send attempts failed");
+        return { success: false, error: error.message };
+      } else {
+        // Wait before retry with exponential backoff
+        const delay = 2000 * Math.pow(2, attempt - 1);
+        console.log(`⏳ Retrying API email send in ${delay / 1000} seconds...`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

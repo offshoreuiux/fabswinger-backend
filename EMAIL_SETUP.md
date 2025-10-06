@@ -1,6 +1,30 @@
 # Email Configuration Setup
 
-## For Production (Render.com)
+## For Cloud Platforms (Vercel, Render.com)
+
+**⚠️ Important**: Vercel and Render.com block outbound SMTP connections. Use email service APIs instead.
+
+### Option 1: Resend (Recommended for Vercel)
+
+1. **Sign up at Resend.com**
+2. **Get your API key** from the dashboard
+3. **Set Environment Variables**:
+   ```
+   RESEND_API_KEY=re_xxxxxxxxxx
+   RESEND_FROM_EMAIL=noreply@yourdomain.com
+   ```
+
+### Option 2: SendGrid
+
+1. **Sign up at SendGrid.com**
+2. **Create API key** in Settings → API Keys
+3. **Set Environment Variables**:
+   ```
+   SENDGRID_API_KEY=SG.xxxxxxxxxx
+   SENDGRID_FROM_EMAIL=noreply@yourdomain.com
+   ```
+
+## For Local Development
 
 ### Option 1: Gmail with App Password (Recommended)
 
@@ -40,7 +64,12 @@
 
 ## Environment Variables Priority
 
-The system will try configurations in this order:
+### For Cloud Platforms (Vercel, Render.com):
+
+1. **Resend API** (RESEND_API_KEY) - Most reliable for Vercel
+2. **SendGrid API** (SENDGRID_API_KEY) - Good alternative
+
+### For Local Development:
 
 1. Gmail with App Password (most reliable)
 2. Gmail SMTP
@@ -61,4 +90,3 @@ After setting up environment variables:
 - **Authentication failed**: Verify username/password
 - **Gmail issues**: Make sure you're using App Password, not regular password
 - **No email sent**: Check if all required environment variables are set
-
