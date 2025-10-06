@@ -61,3 +61,4 @@ After setting up environment variables:
 - **Authentication failed**: Verify username/password
 - **Gmail issues**: Make sure you're using App Password, not regular password
 - **No email sent**: Check if all required environment variables are set
+
