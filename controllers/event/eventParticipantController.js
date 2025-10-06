@@ -123,6 +123,11 @@ const updateParticipantStatus = async (req, res) => {
     const { status } = req.body;
     const userId = req.user.userId;
 
+    console.log("participantId", participantId);
+    console.log("eventId", eventId);
+    console.log("status", status);
+    console.log("userId", userId);
+
     const participant = await EventParticipant.findOne({
       userId: participantId,
       eventId,
@@ -247,6 +252,17 @@ const leaveEvent = async (req, res) => {
 
     // Remove the participant
     await EventParticipant.findByIdAndDelete(participant._id);
+
+    const notification = await Notification.findOne({
+      type: "event_application",
+      sender: userId,
+      relatedItem: eventId,
+      relatedItemModel: "Event",
+    });
+    if (notification) {
+      await notification.deleteOne();
+      console.log("notification deleted", notification);
+    }
 
     res.status(200).json({
       message: "Successfully left the event",

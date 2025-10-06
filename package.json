@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "send:test:email": "node scripts/sendTestEmail.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -25,7 +26,6 @@
     "nodemailer": "^7.0.6",
     "nodemon": "^3.1.10",
     "redis": "^5.8.1",
-    "resend": "^3.5.0",
     "socket.io": "^4.8.1",
     "uuid": "^11.1.0"
   }
