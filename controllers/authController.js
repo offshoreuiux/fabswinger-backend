@@ -2,7 +2,7 @@ const User = require("../models/UserSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
-const transporter = require("../utils/transporter");
+const { sendMail } = require("../utils/transporter");
 const nodemailer = require("nodemailer");
 
 // Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
@@ -254,28 +254,16 @@ const forgotPassword = async (req, res) => {
     await user.save();
 
     const mailOptions = {
-      from: process.env.SMTP_USER,
       to: email,
       subject: "Password Reset Code - VerifiedSwingers",
       html: generatePasswordResetEmail(code),
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
 
-    if (transporter) {
-      transporter.sendMail(mailOptions, (error, info) => {
-        if (error) {
-          console.log("Email error:", error);
-        } else {
-          console.log("Email sent: ", info.response);
-        }
-      });
-    } else {
-      console.log(
-        "Email transporter not available. Password reset code:",
-        code
-      );
-      console.log(
-        "Please set up email configuration in environment variables."
-      );
+    try {
+      await sendMail(mailOptions);
+    } catch (err) {
+      console.log("Email error:", err?.message || err);
     }
 
     res.json({ code });
