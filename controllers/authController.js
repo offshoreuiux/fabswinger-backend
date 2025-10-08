@@ -250,8 +250,6 @@ const forgotPassword = async (req, res) => {
       return res.status(400).json({ error: "User not found" });
     }
     const code = Math.floor(100000 + Math.random() * 900000);
-    user.passwordResetCode = code;
-    await user.save();
 
     const mailOptions = {
       to: email,
@@ -262,11 +260,18 @@ const forgotPassword = async (req, res) => {
 
     try {
       await sendMail(mailOptions);
+      // Only save the code if email was sent successfully
+      user.passwordResetCode = code;
+      user.passwordResetCodeExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+      await user.save();
+      res.json({ success: true, message: "Password reset code sent to email" });
     } catch (err) {
       console.log("Email error:", err?.message || err);
+      return res.status(500).json({
+        success: false,
+        error: "Failed to send password reset email",
+      });
     }
-
-    res.json({ code });
   } catch (error) {
     res.status(500).json({ error: "Server error during forgot password" });
   }
@@ -279,10 +284,19 @@ const verifyPasswordResetCode = async (req, res) => {
     if (!user) {
       return res.status(400).json({ error: "User not found", success: false });
     }
-    if (user.passwordResetCode != code) {
+    // Check code matches and not expired
+    if (
+      user.passwordResetCode != code ||
+      !user.passwordResetCodeExpires ||
+      user.passwordResetCodeExpires < new Date()
+    ) {
       return res.status(400).json({ error: "Invalid code", success: false });
     }
-    res.json({ message: "Code verified", success: true });
+    res.json({
+      message:
+        "Code verified successfully, navigating to create new password page",
+      success: true,
+    });
   } catch (error) {
     res.status(500).json({
       error: "Server error during verify password reset code",
@@ -306,14 +320,22 @@ const resetPassword = async (req, res) => {
         success: false,
       });
     }
-    if (user.passwordResetCode != code) {
+    if (
+      user.passwordResetCode != code ||
+      !user.passwordResetCodeExpires ||
+      user.passwordResetCodeExpires < new Date()
+    ) {
       return res.status(400).json({ error: "Invalid code", success: false });
     }
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.passwordResetCode = null;
+    user.passwordResetCodeExpires = null;
     await user.save();
-    res.json({ message: "Password reset successfully", success: true });
+    res.json({
+      message: "Password reset successfullyrthgfghfgh",
+      success: true,
+    });
   } catch (error) {
     res.status(500).json({
       error: "Server error during reset password",

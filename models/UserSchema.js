@@ -277,6 +277,10 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    passwordResetCodeExpires: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true, // auto add createdAt and updatedAt

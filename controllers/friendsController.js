@@ -180,6 +180,7 @@ const addFriend = async (req, res) => {
     res.status(200).json({
       message: "Friend request sent successfully",
       friendRequest: friend,
+      success: true,
     });
   } catch (error) {
     console.log("Error in fetching friend list", error);
@@ -404,7 +405,11 @@ const rejectFriendRequest = async (req, res) => {
     //   // Don't fail the request if notification fails
     // }
 
-    res.status(200).json({ message: "Friend request rejected successfully" });
+    res.status(200).json({
+      message: "Friend request rejected successfully",
+      friendId: friendId,
+      success: true,
+    });
   } catch (error) {
     console.log("Error in fetching friend list", error);
     res.status(500).json({ error: "internal server error" });
@@ -439,14 +444,14 @@ const getOtherUserFriendList = async (req, res) => {
       status: { $nin: ["rejected", "blocked"] },
     });
 
-    // Create a set of current user's friend IDs for quick lookup
-    const currentUserFriendIds = new Set();
-    currentUserFriends.forEach((friend) => {
-      if (friend.sender.toString() === currentUserId) {
-        currentUserFriendIds.add(friend.receiver.toString());
-      } else {
-        currentUserFriendIds.add(friend.sender.toString());
-      }
+    // Create a map of current user's friend IDs to their friendship status for quick lookup
+    const currentUserFriendStatusByUserId = new Map();
+    currentUserFriends.forEach((friendshipDoc) => {
+      const otherUserId =
+        friendshipDoc.sender.toString() === currentUserId
+          ? friendshipDoc.receiver.toString()
+          : friendshipDoc.sender.toString();
+      currentUserFriendStatusByUserId.set(otherUserId, friendshipDoc.status);
     });
 
     // Process the friend list to return the correct user info and status
@@ -458,13 +463,13 @@ const getOtherUserFriendList = async (req, res) => {
         : friendship.sender;
       const friendId = friendUser._id.toString();
 
-      const isMutualFriend = currentUserFriendIds.has(friendId);
+      const mutualStatusWithCurrentUser =
+        currentUserFriendStatusByUserId.get(friendId) || null;
 
       return {
         ...friendUser.toObject(),
         status: friendship.status,
-        isMutualFriend,
-        mutualFriendStatus: isMutualFriend ? "mutual" : "not_mutual",
+        mutualFriendStatus: mutualStatusWithCurrentUser || "not_mutual",
       };
     });
 

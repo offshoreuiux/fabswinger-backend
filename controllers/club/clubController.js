@@ -19,6 +19,7 @@ const createClub = async (req, res) => {
       clubEmail,
       phone,
       people,
+      isOwner,
     } = req.body;
     const owner = req.user.userId;
     const image = req.file;
@@ -114,6 +115,7 @@ const getClubs = async (req, res) => {
       limit = 10,
       search = "",
       location = "",
+      region: regionSearch = "",
       filter = {},
     } = req.query;
     const skip = (page - 1) * limit;
@@ -180,7 +182,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            region: { $regex: location, $options: "i" },
+            location: { $regex: location, $options: "i" },
           },
         },
         {
@@ -213,7 +215,7 @@ const getClubs = async (req, res) => {
       ]);
 
       totalCount = await Club.countDocuments({
-        region: { $regex: location, $options: "i" },
+        location: { $regex: location, $options: "i" },
         name: { $regex: search, $options: "i" },
         ...query,
       });
@@ -225,7 +227,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            region: { $regex: location, $options: "i" },
+            location: { $regex: location, $options: "i" },
           },
         },
         {
@@ -320,7 +322,7 @@ const getClubs = async (req, res) => {
       totalCount = await Club.countDocuments({
         ...query,
         name: { $regex: search, $options: "i" },
-        region: { $regex: location, $options: "i" },
+        location: { $regex: location, $options: "i" },
       });
     } else if (sort === "top_rated") {
       // Use aggregation to calculate average ratings and sort by rating
@@ -361,7 +363,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            region: { $regex: location, $options: "i" },
+            location: { $regex: location, $options: "i" },
           },
         },
         {
@@ -393,7 +395,7 @@ const getClubs = async (req, res) => {
           $match: {
             ...query,
             name: { $regex: search, $options: "i" },
-            region: { $regex: location, $options: "i" },
+            location: { $regex: location, $options: "i" },
           },
         },
         { $count: "total" },
@@ -404,7 +406,8 @@ const getClubs = async (req, res) => {
     } else {
       // Normal find for other sorts
       const mongoQuery = {
-        region: { $regex: location, $options: "i" },
+        location: { $regex: location, $options: "i" },
+        region: { $regex: regionSearch, $options: "i" },
         name: { $regex: search, $options: "i" },
         ...query,
       };

@@ -45,14 +45,14 @@ const getProfileHotlist = async (req, res) => {
               { sender: userId, receiver: profile._id },
               { sender: profile._id, receiver: userId },
             ],
-            status: "accepted",
+            status: { $in: ["accepted", "pending"] },
           });
 
           return {
             ...item,
             profileId: {
               ...profile,
-              isFriend: !!friendship,
+              friendStatus: friendship ? friendship.status : null,
             },
           };
         })
@@ -95,7 +95,7 @@ const getProfileHotlist = async (req, res) => {
               { sender: userId, receiver: profile._id },
               { sender: profile._id, receiver: userId },
             ],
-            status: "accepted",
+            status: { $in: ["accepted", "pending"] },
           });
 
           // Convert profile to plain object if it's a Mongoose document
@@ -108,7 +108,7 @@ const getProfileHotlist = async (req, res) => {
             ...itemObj,
             profileId: {
               ...profileObj,
-              isFriend: friendship ? true : false,
+              friendStatus: friendship ? friendship : null,
             },
           };
         })

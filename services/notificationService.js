@@ -3,6 +3,17 @@ const User = require("../models/UserSchema");
 const Comment = require("../models/forum/PostCommentSchema");
 
 class NotificationService {
+  // Build clickable HTML link to a user's profile (HashRouter expects #/profile/:id)
+  static buildUserLink(displayName, userId, params = {}) {
+    const safeName = String(displayName || "");
+    const safeId = String(userId || "");
+    const query = new URLSearchParams({
+      ...params,
+      from: params.from || "notification",
+    }).toString();
+    const href = `#/profile/${safeId}`;
+    return `<a href="${href}" class="text-sm font-semibold capitalize hover:text-blue-600 hover:underline">${safeName}</a>`;
+  }
   // Create a new notification
   static async createNotification(notificationData) {
     try {
@@ -63,9 +74,11 @@ class NotificationService {
         sender: senderId,
         type: "message",
         title: "New Message",
-        message: `<span class="text-sm font-semibold capitalize">${
-          sender.nickname || sender.username
-        }</span>, sent you a message: ${preview}`,
+        message: `${NotificationService.buildUserLink(
+          sender.nickname || sender.username,
+          senderId,
+          { type: "message" }
+        )}, sent you a message: ${preview}`,
         // Linkable context kept in metadata since relatedItemModel doesn't include Chat/Message
         relatedItem: senderId,
         relatedItemModel: "User",
@@ -99,9 +112,11 @@ class NotificationService {
         sender: senderId,
         type: "friend_request",
         title: "New Friend Request",
-        message: `<span class="text-sm font-semibold capitalize">${
-          sender.nickname || sender.username
-        }</span> sent you a friend request`,
+        message: `${NotificationService.buildUserLink(
+          sender.nickname || sender.username,
+          senderId,
+          { type: "friend_request" }
+        )} sent you a friend request`,
         relatedItem: friendRequestId,
         relatedItemModel: "FriendRequest",
         metadata: {
@@ -134,9 +149,11 @@ class NotificationService {
         sender: accepterId,
         type: "friend_request_accepted",
         title: "Friend Request Accepted",
-        message: `<span class="text-sm font-semibold capitalize">${
-          accepter.nickname || accepter.username
-        }</span> accepted your friend request`,
+        message: `${NotificationService.buildUserLink(
+          accepter.nickname || accepter.username,
+          accepterId,
+          { type: "friend_request_accepted" }
+        )} accepted your friend request`,
         relatedItem: accepterId,
         relatedItemModel: "User",
         metadata: {
@@ -171,9 +188,11 @@ class NotificationService {
         sender: rejecterId,
         type: "friend_request_rejected",
         title: "Friend Request Declined",
-        message: `<span class="text-sm font-semibold capitalize">${
-          rejecter.nickname || rejecter.username
-        }</span> declined your friend request`,
+        message: `${NotificationService.buildUserLink(
+          rejecter.nickname || rejecter.username,
+          rejecterId,
+          { type: "friend_request_rejected" }
+        )} declined your friend request`,
         relatedItem: rejecterId,
         relatedItemModel: "User",
         metadata: {
@@ -209,9 +228,11 @@ class NotificationService {
         sender: likerId,
         type: "post_like",
         title: "New Like",
-        message: `<span class="text-sm font-semibold capitalize">${
-          liker.nickname || liker.username
-        }</span> liked your post`,
+        message: `${NotificationService.buildUserLink(
+          liker.nickname || liker.username,
+          likerId,
+          { type: "post_like" }
+        )} liked your post`,
         relatedItem: postId,
         relatedItemModel: "Post",
         metadata: {
@@ -244,9 +265,11 @@ class NotificationService {
         sender: likerId,
         type: "forum_like",
         title: "New Like",
-        message: `<span class="text-sm font-semibold capitalize">${
-          liker.nickname || liker.username
-        }</span> liked your forum post`,
+        message: `${NotificationService.buildUserLink(
+          liker.nickname || liker.username,
+          likerId,
+          { type: "forum_like" }
+        )} liked your forum post`,
         relatedItem: postId,
         relatedItemModel: "ForumPost",
         metadata: {
@@ -289,9 +312,11 @@ class NotificationService {
         sender: commenterId,
         type: "post_comment",
         title: "New Comment",
-        message: `<span class="text-sm font-semibold capitalize">${
-          commenter.nickname || commenter.username
-        }</span> commented: "${truncatedComment}"`,
+        message: `${NotificationService.buildUserLink(
+          commenter.nickname || commenter.username,
+          commenterId,
+          { type: "post_comment" }
+        )} commented: "${truncatedComment}"`,
         relatedItem: postId,
         relatedItemModel: "Post",
         metadata: {
@@ -324,9 +349,11 @@ class NotificationService {
         sender: viewerId,
         type: "profile_view",
         title: "Profile Viewed",
-        message: `<span class="text-sm font-semibold capitalize">${
-          viewer.nickname || viewer.username
-        }</span> viewed your profile`,
+        message: `${NotificationService.buildUserLink(
+          viewer.nickname || viewer.username,
+          viewerId,
+          { type: "profile_view" }
+        )} viewed your profile`,
         relatedItem: viewerId,
         relatedItemModel: "User",
         metadata: {
@@ -385,17 +412,21 @@ class NotificationService {
         updateData = {
           type: "accepted",
           title: "Friend Request Accepted",
-          message: `You accepted <span class="text-sm font-semibold capitalize">${
-            sender.nickname || sender.username
-          }</span> as your friend`,
+          message: `You accepted ${NotificationService.buildUserLink(
+            sender.nickname || sender.username,
+            senderId,
+            { type: "friend_request_accepted" }
+          )} as your friend`,
         };
       } else if (newStatus === "rejected") {
         updateData = {
           type: "rejected",
           title: "Friend Request Declined",
-          message: `You declined <span class="text-sm font-semibold capitalize">${
-            sender.nickname || sender.username
-          }</span> as your friend`,
+          message: `You declined ${NotificationService.buildUserLink(
+            sender.nickname || sender.username,
+            senderId,
+            { type: "friend_request_rejected" }
+          )} as your friend`,
         };
       }
 
@@ -451,9 +482,11 @@ class NotificationService {
         sender: applicantId,
         type: "event_application",
         title: "New Event Application",
-        message: `<span class="text-sm font-semibold capitalize">${
-          applicant.nickname || applicant.username
-        }</span> applied to join your event "${eventTitle}"`,
+        message: `${NotificationService.buildUserLink(
+          applicant.nickname || applicant.username,
+          applicantId,
+          { type: "event_application" }
+        )} applied to join your event "${eventTitle}"`,
         relatedItem: eventId,
         relatedItemModel: "Event",
         metadata: {
@@ -487,9 +520,11 @@ class NotificationService {
         sender: eventCreatorId,
         type: "event_application_accepted",
         title: "Event Application Accepted",
-        message: `<span class="text-sm font-semibold capitalize">${
-          eventCreator.nickname || eventCreator.username
-        }</span> accepted your application to join their event "${eventTitle}"`,
+        message: `${NotificationService.buildUserLink(
+          eventCreator.nickname || eventCreator.username,
+          eventCreatorId,
+          { type: "event_application_accepted" }
+        )} accepted your application to join their event "${eventTitle}"`,
         relatedItem: eventId,
         relatedItemModel: "Event",
         metadata: {
@@ -526,9 +561,11 @@ class NotificationService {
         sender: eventCreatorId,
         type: "event_application_rejected",
         title: "Event Application Rejected",
-        message: `<span class="text-sm font-semibold capitalize">${
-          eventCreator.nickname || eventCreator.username
-        }</span> rejected your application to join their event "${eventTitle}"`,
+        message: `${NotificationService.buildUserLink(
+          eventCreator.nickname || eventCreator.username,
+          eventCreatorId,
+          { type: "event_application_rejected" }
+        )} rejected your application to join their event "${eventTitle}"`,
         relatedItem: eventId,
         relatedItemModel: "Event",
         metadata: {
@@ -565,17 +602,21 @@ class NotificationService {
         updateData = {
           type: "accepted",
           title: "Request to join event Accepted",
-          message: `You accepted <span class="text-sm font-semibold capitalize">${
-            sender.nickname || sender.username
-          }</span> to join your event "${eventTitle}"`,
+          message: `You accepted ${NotificationService.buildUserLink(
+            sender.nickname || sender.username,
+            senderId,
+            { type: "event_application_accepted" }
+          )} to join your event "${eventTitle}"`,
         };
       } else if (newStatus === "rejected") {
         updateData = {
           type: "rejected",
           title: "Request to join event Declined",
-          message: `You declined <span class="text-sm font-semibold capitalize">${
-            sender.nickname || sender.username
-          }</span> to join your event "${eventTitle}"`,
+          message: `You declined ${NotificationService.buildUserLink(
+            sender.nickname || sender.username,
+            senderId,
+            { type: "event_application_rejected" }
+          )} to join your event "${eventTitle}"`,
         };
       }
 
@@ -630,9 +671,15 @@ class NotificationService {
         sender: applicantId,
         type: "meet_application",
         title: "New Meet Application",
-        message: `<span class="text-sm font-semibold capitalize">${
-          meetCreator.nickname || meetCreator.username
-        }</span> applied to join your meet "${meetTitle}"`,
+        message: `${NotificationService.buildUserLink(
+          (await User.findById(applicantId).select("nickname username"))
+            ?.nickname ||
+            (await User.findById(applicantId).select("nickname username"))
+              ?.username ||
+            "Someone",
+          applicantId,
+          { type: "meet_application" }
+        )} applied to join your meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -665,9 +712,11 @@ class NotificationService {
         sender: meetCreatorId,
         type: "meet_application_accepted",
         title: "Meet Application Accepted",
-        message: `<span class="text-sm font-semibold capitalize">${
-          meetCreator.nickname || meetCreator.username
-        }</span> accepted your application to join their meet "${meetTitle}"`,
+        message: `${NotificationService.buildUserLink(
+          meetCreator.nickname || meetCreator.username,
+          meetCreatorId,
+          { type: "meet_application_accepted" }
+        )} accepted your application to join their meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -704,9 +753,11 @@ class NotificationService {
         sender: meetCreatorId,
         type: "meet_application_rejected",
         title: "Meet Application Rejected",
-        message: `<span class="text-sm font-semibold capitalize">${
-          meetCreator.nickname || meetCreator.username
-        }</span> rejected your application to join their meet "${meetTitle}"`,
+        message: `${NotificationService.buildUserLink(
+          meetCreator.nickname || meetCreator.username,
+          meetCreatorId,
+          { type: "meet_application_rejected" }
+        )} rejected your application to join their meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -742,9 +793,11 @@ class NotificationService {
         sender: applicantId,
         type: "meet_joined",
         title: "Meet Joined",
-        message: `<span class="text-sm font-semibold capitalize">${
-          applicant.nickname || applicant.username
-        }</span> joined your meet "${meetTitle}"`,
+        message: `${NotificationService.buildUserLink(
+          applicant.nickname || applicant.username,
+          applicantId,
+          { type: "meet_joined" }
+        )} joined your meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -777,9 +830,11 @@ class NotificationService {
         sender: meetCreatorId,
         type: "meet_join_confirmation",
         title: "Successfully Joined Meet",
-        message: `You have successfully joined <span class="text-sm font-semibold capitalize">${
-          meetCreator.nickname || meetCreator.username
-        }</span>'s meet "${meetTitle}"`,
+        message: `You have successfully joined ${NotificationService.buildUserLink(
+          meetCreator.nickname || meetCreator.username,
+          meetCreatorId,
+          { type: "meet_join_confirmation" }
+        )}'s meet "${meetTitle}"`,
         relatedItem: meetId,
         relatedItemModel: "Meet",
         metadata: {
@@ -816,17 +871,21 @@ class NotificationService {
         updateData = {
           type: "accepted",
           title: "Request to join meet Accepted",
-          message: `You accepted <span class="text-sm font-semibold capitalize">${
-            sender.nickname || sender.username
-          }</span> to join your meet "${meetTitle}"`,
+          message: `You accepted ${NotificationService.buildUserLink(
+            sender.nickname || sender.username,
+            senderId,
+            { type: "meet_application_accepted" }
+          )} to join your meet "${meetTitle}"`,
         };
       } else if (newStatus === "rejected") {
         updateData = {
           type: "rejected",
           title: "Request to join meet Declined",
-          message: `You declined <span class="text-sm font-semibold capitalize">${
-            sender.nickname || sender.username
-          }</span> to join your meet "${meetTitle}"`,
+          message: `You declined ${NotificationService.buildUserLink(
+            sender.nickname || sender.username,
+            senderId,
+            { type: "meet_application_rejected" }
+          )} to join your meet "${meetTitle}"`,
         };
       }
 
@@ -888,9 +947,11 @@ class NotificationService {
         sender: commenterId,
         type: "forum_comment",
         title: "New Comment",
-        message: `<span class="text-sm font-semibold capitalize">${
-          commenter.nickname || commenter.username
-        }</span> ${
+        message: `${NotificationService.buildUserLink(
+          commenter.nickname || commenter.username,
+          commenterId,
+          { type: parentCommentId ? "forum_reply" : "forum_comment" }
+        )} ${
           parentCommentId
             ? "replied to your comment"
             : "commented on your forum post"
@@ -922,9 +983,11 @@ class NotificationService {
         sender: winkerId,
         type: "profile_wink",
         title: "New Wink",
-        message: `<span class="text-sm font-semibold capitalize">${
-          winker.nickname || winker.username
-        }</span> winked your profile`,
+        message: `${NotificationService.buildUserLink(
+          winker.nickname || winker.username,
+          winkerId,
+          { type: "profile_wink" }
+        )} winked your profile`,
         relatedItem: profileOwnerId,
         relatedItemModel: "User",
         metadata: {
