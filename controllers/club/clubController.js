@@ -602,6 +602,8 @@ const deleteClub = async (req, res) => {
       await s3.deleteObject(params).promise();
     }
     await Club.findByIdAndDelete(id);
+    await ClubReview.deleteMany({ clubId: id });
+    
     res.status(200).json({
       message: "Club deleted successfully",
       club: club,

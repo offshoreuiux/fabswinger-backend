@@ -279,7 +279,10 @@ const leaveMeet = async (req, res) => {
     await MeetParticipant.findByIdAndDelete(participant._id);
 
     res.status(200).json({
-      message: "Successfully left the meet",
+      message:
+        participant.status === "applied"
+          ? "Successfully cancelled the request"
+          : "Successfully left the meet",
       meet: participant,
     });
   } catch (error) {
@@ -325,10 +328,9 @@ const removeParticipant = async (req, res) => {
     const { participantId } = req.params;
     const userId = req.user.userId;
 
-    const participant = await MeetParticipant.findById(participantId).populate(
-      "meetId",
-      "userId"
-    );
+    const participant = await MeetParticipant.findOne({
+      userId: participantId,
+    }).populate("meetId", "userId");
 
     if (!participant) {
       return res.status(404).json({ error: "Participant not found" });
@@ -341,12 +343,23 @@ const removeParticipant = async (req, res) => {
         .json({ error: "Only meet organizers can remove participants" });
     }
 
-    participant.status = "removed";
-    await participant.save();
+    await participant.deleteOne();
+
+    const notification = await Notification.findOne({
+      type: "meet_application",
+      sender: participant.userId,
+      recipient: participant.meetId.userId,
+    });
+
+    if (notification) {
+      console.log("notification deleted", notification);
+      await notification.deleteOne();
+    }
 
     res.json({
       message: "Participant removed from meet",
       participant,
+      notification,
     });
   } catch (error) {
     console.error("Error in removeParticipant:", error);

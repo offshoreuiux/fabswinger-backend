@@ -12,7 +12,7 @@ const { getIO } = require("../utils/socket");
 
 const createPost = async (req, res) => {
   try {
-    const { caption, privacy = "public", location } = req.body;
+    const { caption, privacy = "public", location, activeButton } = req.body;
     const userId = req.user.userId; // Fixed: should be req.user.userId
     const uploadedImageUrls = [];
 
@@ -48,7 +48,7 @@ const createPost = async (req, res) => {
       .populate("userId", "username profileImage nickname")
       .lean();
 
-    res.status(201).json(populatedPost);
+    res.status(201).json({ post: populatedPost, activeButton });
   } catch (error) {
     console.log("Error in createPost:", error);
     res.status(500).json({ error: error.message || "Internal server error" });
@@ -72,6 +72,17 @@ const getPosts = async (req, res) => {
     const currentUserIdObj = new mongoose.Types.ObjectId(currentUserId);
 
     let query = {};
+
+    // Exclude blocked users' posts (both directions)
+    const blockedFriendList = await Friends.find({
+      $or: [{ sender: currentUserIdObj }, { receiver: currentUserIdObj }],
+      status: "blocked",
+    }).select("sender receiver");
+    const blockedIds = blockedFriendList.map((friend) =>
+      friend.sender.toString() === currentUserIdObj.toString()
+        ? friend.receiver
+        : friend.sender
+    );
 
     // If filtering by a specific user
     if (userId) {
@@ -422,6 +433,22 @@ const getPosts = async (req, res) => {
           };
         }
       }
+    }
+
+    // Exclude blocked users' posts (both directions)
+    const blockedFriendList = await Friends.find({
+      $or: [{ sender: currentUserIdObj }, { receiver: currentUserIdObj }],
+      status: "blocked",
+    }).select("sender receiver");
+    const blockedIds = blockedFriendList.map((friend) =>
+      friend.sender.toString() === currentUserIdObj.toString()
+        ? friend.receiver
+        : friend.sender
+    );
+
+    // Apply blocked users exclusion uniformly across all query shapes
+    if (blockedIds.length > 0) {
+      query = { $and: [query, { userId: { $nin: blockedIds } }] };
     }
 
     // Track if we need geospatial query

@@ -5,7 +5,7 @@ const User = require("../../models/UserSchema");
 const Friends = require("../../models/FriendRequestSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");
-const {s3} = require("../../utils/s3");
+const { s3 } = require("../../utils/s3");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -240,13 +240,14 @@ const getEvents = async (req, res) => {
       longitude,
       page = 1,
       limit = 10,
-      maxDistance = 50,
+      maxDistance = 100,
       search = "",
       filter = {},
       sortBy = "",
       seeAll = false,
     } = req.query;
     const numericLimit = parseInt(limit);
+    console.log("maxDistance", maxDistance);
     const numericPage = parseInt(page);
     const skip = (numericPage - 1) * numericLimit;
 
@@ -320,6 +321,11 @@ const getEvents = async (req, res) => {
             filterQuery.date = { $lt: new Date() };
           }
         }
+      }
+
+      // By default, exclude past events unless explicitly requesting history
+      if (!discover || discover !== "history") {
+        filterQuery.date = { $gte: new Date() };
       }
 
       return filterQuery;
@@ -455,8 +461,10 @@ const getEvents = async (req, res) => {
               .limit(numericLimit);
           }
         } else {
-          totalCount = await Event.countDocuments();
-          events = await Event.find()
+          // Exclude past events by default
+          const now = new Date();
+          totalCount = await Event.countDocuments({ date: { $gte: now } });
+          events = await Event.find({ date: { $gte: now } })
             .sort({ date: 1 })
             .skip(skip)
             .limit(numericLimit);
@@ -679,14 +687,24 @@ const getEvents = async (req, res) => {
                 participantCount: { $size: { $ifNull: ["$participants", []] } },
               },
             },
-            { $match: { title: { $regex: search, $options: "i" } } },
+            {
+              $match: {
+                title: { $regex: search, $options: "i" },
+                date: { $gte: new Date() },
+              },
+            },
             { $sort: { participantCount: -1, date: -1 } },
             { $skip: skip },
             { $limit: numericLimit },
             { $project: { participants: 0 } },
           ];
           const countPipeline = [
-            { $match: { title: { $regex: search, $options: "i" } } },
+            {
+              $match: {
+                title: { $regex: search, $options: "i" },
+                date: { $gte: new Date() },
+              },
+            },
             { $count: "count" },
           ];
           const [aggResults, countResults] = await Promise.all([
@@ -725,6 +743,9 @@ const getEvents = async (req, res) => {
             if (sort && sort !== "all") {
               sortOption = sort;
             }
+          } else {
+            // Exclude past events when not in seeAll mode
+            additionalFilters = { date: { $gte: new Date() } };
           }
 
           const geoPipeline = [
@@ -853,7 +874,7 @@ const getEvents = async (req, res) => {
             }
           }
         }
-        if (discover && discover !== "discover") {
+        if (discover) {
           // For scheduled/history, restrict to events the user participated in
           if (discover === "scheduled" || discover === "history") {
             const participated = await EventParticipant.find({
@@ -868,6 +889,10 @@ const getEvents = async (req, res) => {
               filterQuery.date = { $lt: new Date() };
             }
           }
+        }
+        // Exclude past events by default when not requesting history
+        if (!discover || discover !== "history") {
+          filterQuery.date = { $gte: new Date() };
         }
         if (sort === "most_popular") {
           // Use aggregation to count participants and sort by participant count
@@ -982,7 +1007,6 @@ const getEvents = async (req, res) => {
             .skip(skip)
             .limit(numericLimit);
         }
-        if (region) filterQuery.region = region;
         break;
     }
 
@@ -1058,6 +1082,22 @@ const getEvents = async (req, res) => {
       eventsWithHotlistInfo,
       userId
     );
+
+    // Ensure totalCount does not include past events unless discover === "history"
+    try {
+      const isHistoryDiscover = parsedFilter?.discover === "history";
+      if (!isHistoryDiscover) {
+        const safeFilterQuery = await buildFilterQuery();
+        const titleQuery = { title: { $regex: search, $options: "i" } };
+        const safeCount = await Event.countDocuments({
+          ...safeFilterQuery,
+          ...titleQuery,
+        });
+        totalCount = safeCount;
+      }
+    } catch (_) {
+      // Fallback to existing totalCount if any error occurs
+    }
 
     const totalPages = Math.ceil((totalCount || 0) / numericLimit) || 0;
     const hasMore = numericPage < totalPages;
@@ -1244,7 +1284,7 @@ const updateEventRules = async (req, res) => {
 
 const getEventsByUser = async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.query.userId;
     const { tab = "all", date } = req.query;
 
     if (!userId) {
@@ -1285,6 +1325,7 @@ const getEventsByUser = async (req, res) => {
       );
       const query = {
         _id: { $in: eventsParticipatedIds },
+        userId: { $ne: userId },
       };
       if (date && date !== "undefined" && date !== "null") {
         const filterDate = new Date(date);
