@@ -222,6 +222,8 @@ const getMeets = async (req, res) => {
       };
     } else if (when === "upcoming") {
       query.date = { $gte: new Date() };
+    } else {
+      query.date = { $gte: new Date() };
     }
 
     if (meetType && meetType !== "all") {
@@ -265,8 +267,6 @@ const getMeets = async (req, res) => {
           .sort({ createdAt: -1 });
         break;
     }
-
-    console.log("meets", meets, type, filters);
 
     // Add hotlist information to events
     const meetsWithHotlistInfo = await addHotlistInfoToMeets(meets, userId);

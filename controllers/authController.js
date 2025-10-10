@@ -11,7 +11,6 @@ const fetch = globalThis.fetch || require("node-fetch");
 // reCAPTCHA verification function
 const verifyRecaptcha = async (recaptchaToken) => {
   const secretKey = process.env.RECAPTCHA_SECRET_KEY;
-  console.log("secretKey", secretKey, recaptchaToken);
 
   if (!secretKey) {
     console.log("RECAPTCHA_SECRET_KEY not found, skipping verification");
@@ -333,7 +332,7 @@ const resetPassword = async (req, res) => {
     user.passwordResetCodeExpires = null;
     await user.save();
     res.json({
-      message: "Password reset successfullyrthgfghfgh",
+      message: "Password reset successfully",
       success: true,
     });
   } catch (error) {
