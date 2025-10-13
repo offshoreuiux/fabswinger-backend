@@ -248,6 +248,43 @@ class NotificationService {
     }
   }
 
+  // Create post wink notification
+  static async createPostWinkNotification(winkerId, postOwnerId, postId) {
+    try {
+      if (winkerId.toString() === postOwnerId.toString()) {
+        return null; // Don't notify if user winks their own post
+      }
+
+      const winker = await User.findById(winkerId).select(
+        "nickname username profileImage"
+      );
+      if (!winker) throw new Error("Winker not found");
+
+      const notificationData = {
+        recipient: postOwnerId,
+        sender: winkerId,
+        type: "post_wink",
+        title: "New Wink",
+        message: `${NotificationService.buildUserLink(
+          winker.nickname || winker.username,
+          winkerId,
+          { type: "post_wink" }
+        )} winked your post`,
+        relatedItem: postId,
+        relatedItemModel: "Post",
+        metadata: {
+          action: "view_post",
+          postId: postId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating post wink notification:", error);
+      throw error;
+    }
+  }
+
   // Create forumn like notification
   static async createForumLikeNotification(likerId, postOwnerId, postId) {
     try {
@@ -1056,7 +1093,7 @@ class NotificationService {
         "friend_request_accepted",
         "friend_request_rejected",
       ],
-      Winks: ["profile_wink"],
+      Winks: ["profile_wink", "post_wink"],
       Events: [
         "event_invite",
         "event_application",
@@ -1076,6 +1113,7 @@ class NotificationService {
       Posts: [
         "post_like",
         "forum_like",
+        "post_wink",
         "post_comment",
         "post_reply",
         "forum_comment",

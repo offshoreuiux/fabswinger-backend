@@ -14,17 +14,6 @@ const createPost = async (req, res) => {
   const image = req.file;
   const userId = req.user.userId;
   let imageUrl;
-  if (image) {
-    const fileName = `forum/images/${uuidv4()}-${image.originalname}`;
-    const params = {
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: fileName,
-      Body: image.buffer,
-      ContentType: image.mimetype,
-    };
-    const uploadResult = await s3.upload(params).promise();
-    imageUrl = uploadResult.Location;
-  }
 
   if (channelId) {
     const channel = await Channel.findById(channelId);
@@ -45,6 +34,20 @@ const createPost = async (req, res) => {
       });
     }
 
+    if (image) {
+      const fileName = `forum/images/${uuidv4()}-${image.originalname}`;
+      const params = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: fileName,
+        Body: image.buffer,
+        ContentType: image.mimetype,
+      };
+      const uploadResult = await s3.upload(params).promise();
+      imageUrl = uploadResult.Location;
+    }
+
+    console.log("imageUrl", imageUrl);
+
     const post = await Post.create({
       caption,
       createdBy: userId,
@@ -62,6 +65,17 @@ const createPost = async (req, res) => {
       post: populatedPost,
     });
   } else {
+    if (image) {
+      const fileName = `forum/images/${uuidv4()}-${image.originalname}`;
+      const params = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: fileName,
+        Body: image.buffer,
+        ContentType: image.mimetype,
+      };
+      const uploadResult = await s3.upload(params).promise();
+      imageUrl = uploadResult.Location;
+    }
     const post = await Post.create({
       caption,
       content: imageUrl,
@@ -160,11 +174,34 @@ const getPostByChannelId = async (req, res) => {
     postId: posts.map((each) => each._id),
   });
 
+  const isMember = await Member.find({
+    channelId: posts.map((each) => each.channelId),
+    userId: req.user.userId,
+  });
+
+  const isLiked = await Like.find({
+    postId: posts.map((each) => each._id),
+    userId: req.user.userId,
+  }).select("postId");
+
+  const likes = await Like.find({
+    postId: posts.map((each) => each._id),
+  });
+
   const postsWithComments = posts.map((each) => {
     const obj = each.toObject();
     obj.comments = comments.filter((comment) =>
       comment.postId.equals(each._id)
     ).length;
+    obj.isMember = isMember.some((member) =>
+      member.channelId.equals(each.channelId?._id)
+    )
+      ? true
+      : false;
+    obj.isLiked = isLiked.some((like) => like.postId.equals(each._id))
+      ? true
+      : false;
+    obj.likes = likes.filter((like) => like.postId.equals(each._id)).length;
     return obj;
   });
 
