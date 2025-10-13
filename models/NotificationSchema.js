@@ -21,6 +21,7 @@ const notificationSchema = new mongoose.Schema(
         "post_like",
         "forum_like",
         "post_comment",
+        "post_wink",
         "post_reply",
         "profile_view",
         "message",
@@ -48,7 +49,7 @@ const notificationSchema = new mongoose.Schema(
       required: true,
     },
     message: {
-      type: String, 
+      type: String,
       required: true,
     },
     relatedItem: {
@@ -57,7 +58,15 @@ const notificationSchema = new mongoose.Schema(
     },
     relatedItemModel: {
       type: String,
-      enum: ["User", "Post", "Event", "Meet", "FriendRequest", "ForumPost", "Wink"],
+      enum: [
+        "User",
+        "Post",
+        "Event",
+        "Meet",
+        "FriendRequest",
+        "ForumPost",
+        "Wink",
+      ],
     },
     isRead: {
       type: Boolean,

@@ -12,13 +12,31 @@ const { getIO } = require("../utils/socket");
 
 const createPost = async (req, res) => {
   try {
-    const { caption, privacy = "public", location, activeButton } = req.body;
+    const {
+      caption,
+      privacy = "public",
+      location,
+      activeButton = "",
+    } = req.body;
     const userId = req.user.userId; // Fixed: should be req.user.userId
     const uploadedImageUrls = [];
 
+    let isImage = false;
+
     if (req.files && req.files.length > 0) {
       for (let file of req.files) {
-        const fileName = `posts/${uuidv4()}-${file.originalname}`;
+        isImage = (file.mimetype || "").startsWith("image/");
+        const isVideo = (file.mimetype || "").startsWith("video/");
+        const folder = isImage
+          ? "posts/images"
+          : isVideo
+          ? "posts/videos"
+          : "posts/others";
+        const sanitizedOriginal = (file.originalname || "upload").replace(
+          /[^a-zA-Z0-9._-]/g,
+          "_"
+        );
+        const fileName = `${folder}/${uuidv4()}-${sanitizedOriginal}`;
 
         const params = {
           Bucket: process.env.AWS_S3_BUCKET_NAME,
@@ -41,6 +59,7 @@ const createPost = async (req, res) => {
       privacy,
       userId,
       location: parsedLocation,
+      isImage,
     });
 
     // Populate user details before sending response
@@ -305,6 +324,7 @@ const getPosts = async (req, res) => {
 */
 
 // Function to get posts with base64 images - NEW VERSION (with friend access to private posts)
+
 const getPosts = async (req, res) => {
   try {
     const {
@@ -834,12 +854,27 @@ const winkPost = async ({ postId, userId, io: socketIo }) => {
       return { error: "Post already winked" };
     }
 
-    // Create new like
+    // Create new wink
     const wink = await PostWink.create({ postId, userId });
     console.log("wink", wink);
 
     // Get updated like count
     const winkCount = await PostWink.countDocuments({ postId });
+
+    // Create notification for post owner
+    try {
+      await NotificationService.createPostWinkNotification(
+        userId,
+        post.userId,
+        postId
+      );
+    } catch (notificationError) {
+      console.error(
+        "Error creating post wink notification:",
+        notificationError
+      );
+      // Don't fail the request if notification fails
+    }
 
     // Emit socket event for real-time updates
     // if (io) {
