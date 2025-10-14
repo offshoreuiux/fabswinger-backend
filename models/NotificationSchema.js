@@ -47,10 +47,12 @@ const notificationSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
+      trim: true,
     },
     message: {
       type: String,
       required: true,
+      trim: true,
     },
     relatedItem: {
       type: mongoose.Schema.Types.ObjectId,
@@ -67,6 +69,7 @@ const notificationSchema = new mongoose.Schema(
         "ForumPost",
         "Wink",
       ],
+      trim: true,
     },
     isRead: {
       type: Boolean,

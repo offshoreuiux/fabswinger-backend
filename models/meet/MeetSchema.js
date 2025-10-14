@@ -10,10 +10,12 @@ const meetSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
+      trim: true,
     },
     description: {
       type: String,
       required: true,
+      trim: true,
     },
     date: {
       type: Date,
@@ -22,16 +24,20 @@ const meetSchema = new mongoose.Schema(
     time: {
       type: String,
       required: true,
+      trim: true,
     },
     location: {
       type: String,
       required: true,
+      trim: true,
     },
     state: {
       type: String,
+      trim: true,
     },
     country: {
       type: String,
+      trim: true,
     },
     coordinates: {
       type: {
@@ -47,6 +53,7 @@ const meetSchema = new mongoose.Schema(
     meetType: {
       type: String,
       required: true,
+      trim: true,
     },
     capacity: {
       type: Number,

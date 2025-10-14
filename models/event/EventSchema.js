@@ -10,10 +10,12 @@ const eventSchema = new mongoose.Schema(
     title: {
       type: String,
       required: true,
+      trim: true,
     },
     description: {
       type: String,
       required: true,
+      trim: true,
     },
     date: {
       type: Date,
@@ -22,10 +24,12 @@ const eventSchema = new mongoose.Schema(
     time: {
       type: String,
       required: true,
+      trim: true,
     },
     location: {
       type: String,
       required: true,
+      trim: true,
     },
     coordinates: {
       type: {
@@ -41,10 +45,12 @@ const eventSchema = new mongoose.Schema(
     image: {
       type: String,
       required: true,
+      trim: true,
     },
     eventType: {
       type: String,
       required: true,
+      trim: true,
     },
     capacity: {
       type: Number,
@@ -102,9 +108,11 @@ const eventSchema = new mongoose.Schema(
     },
     eventRules: {
       type: String,
+      trim: true,
     },
     region: {
       type: String,
+      trim: true,
     },
   },
   {

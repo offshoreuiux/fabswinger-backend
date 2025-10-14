@@ -21,6 +21,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       select: false, // Prevent accidental exposure
+      trim: true,
     },
     // Profile completion
     profileCompleted: {
@@ -218,10 +219,12 @@ const userSchema = new mongoose.Schema(
     profileImage: {
       type: String,
       default: "",
+      trim: true,
     },
     mobileNumber: {
       type: String,
       default: "",
+      trim: true,
     },
 
     // Account status
