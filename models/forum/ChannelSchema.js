@@ -5,10 +5,12 @@ const channelSchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
+      trim: true,
     },
     description: {
       type: String,
       required: true,
+      trim: true,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -18,10 +20,12 @@ const channelSchema = new mongoose.Schema(
     image: {
       type: String,
       default: "",
+      trim: true,
     },
     backgroundImage: {
       type: String,
       default: "",
+      trim: true,
     },
   },
   {

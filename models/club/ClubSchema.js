@@ -5,20 +5,25 @@ const clubSchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
+      trim: true,
     },
     region: {
       type: String,
       required: true,
+      trim: true,
     },
     description: {
       type: String,
+      trim: true,
     },
     url: {
       type: String,
       required: true,
+      trim: true,
     },
     location: {
       type: String,
+      trim: true,
     },
     // Geo Location for Nearby Filter
     geoLocation: {
@@ -35,13 +40,16 @@ const clubSchema = new mongoose.Schema(
     clubEmail: {
       type: String,
       required: true,
+      trim: true,
     },
     phone: {
       type: String,
+      trim: true,
     },
     people: {
       type: [String],
       required: true,
+      trim: true,
     },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
@@ -54,6 +62,7 @@ const clubSchema = new mongoose.Schema(
     image: {
       type: String,
       required: true,
+      trim: true,
     },
     rating: {
       type: Number,

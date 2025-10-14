@@ -5,10 +5,12 @@ const postSchema = new mongoose.Schema(
     caption: {
       type: String,
       required: true,
+      trim: true,
     },
     content: {
       type: String,
       required: true,
+      trim: true,
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

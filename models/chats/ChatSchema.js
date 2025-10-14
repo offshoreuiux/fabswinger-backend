@@ -19,10 +19,12 @@ const chatSchema = new mongoose.Schema(
       required: function () {
         return this.type === "group";
       },
+      trim: true,
     },
     description: {
       type: String,
       default: "",
+      trim: true,
     },
     admin: {
       type: mongoose.Schema.Types.ObjectId,
