@@ -2,6 +2,8 @@ const Friends = require("../models/FriendRequestSchema");
 const NotificationService = require("../services/notificationService");
 const User = require("../models/UserSchema");
 const Notification = require("../models/NotificationSchema");
+const { sendMail } = require("../utils/transporter");
+const { generateFriendRequestEmail } = require("../utils/emailTemplates");
 
 const getFriendList = async (req, res) => {
   try {
@@ -165,12 +167,19 @@ const addFriend = async (req, res) => {
     // Create notification for the recipient
     try {
       const user = await User.findById(friendId);
+      await NotificationService.createFriendRequestNotification(
+        userId,
+        friendId,
+        friend._id
+      );
       if (user?.settings?.getFriendInvites) {
-        await NotificationService.createFriendRequestNotification(
-          userId,
-          friendId,
-          friend._id
-        );
+        const mailOptions = {
+          to: user.email,
+          subject: "New Friend Request",
+          html: generateFriendRequestEmail(userId, friendId),
+          from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+        };
+        await sendMail(mailOptions);
       }
     } catch (notificationError) {
       console.error("Error creating notification:", notificationError);

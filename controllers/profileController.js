@@ -5,7 +5,10 @@ const { s3, getS3KeyFromUrl } = require("../utils/s3");
 const mongoose = require("mongoose");
 const Friends = require("../models/FriendRequestSchema");
 const Wink = require("../models/WinkSchema");
+// const { getOnlineUsers: getOnlineUsersFromSocket } = require("../utils/socket");
 const NotificationService = require("../services/notificationService");
+const { sendMail } = require("../utils/transporter");
+const { generateProfileWinkEmail } = require("../utils/emailTemplates");
 
 // Update user profile
 const updateProfile = async (req, res) => {
@@ -121,7 +124,19 @@ const getProfile = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({ user });
+    // Sum of all winks received by this user
+    const winkAggregation = await Wink.aggregate([
+      { $match: { winkedProfileId: new mongoose.Types.ObjectId(userId) } },
+      { $group: { _id: null, total: { $sum: "$count" } } },
+    ]);
+    const totalWinks = winkAggregation?.[0]?.total || 0;
+
+    const userWithWinkCount = {
+      ...user.toObject(),
+      winkCount: totalWinks,
+    };
+
+    res.json({ user: userWithWinkCount });
   } catch (error) {
     console.error("Get profile error:", error);
     res.status(500).json({ error: "Server error while fetching profile" });
@@ -370,6 +385,8 @@ const getProfiles = async (req, res) => {
 
 // Get profile by ID (for viewing other users)
 const getProfileById = async (req, res) => {
+  console.log("this functiion is invoked ");
+
   try {
     const { id } = req.params;
     const loggedInUserId = req.user.userId;
@@ -403,6 +420,8 @@ const getProfileById = async (req, res) => {
 
     res.json({ user: userWithRequest });
   } catch (error) {
+    console.log("error111");
+
     console.error("Get profile by ID error:", error);
     res.status(500).json({ error: "Server error while fetching profile" });
   }
@@ -590,17 +609,48 @@ const winkProfile = async ({ profileId, userId, io }) => {
         count: 1,
       });
     }
+    await NotificationService.createProfileWinkNotification(userId, profileId);
     if (user?.settings?.getWinks) {
-      await NotificationService.createProfileWinkNotification(
-        userId,
-        profileId
-      );
+      const mailOptions = {
+        to: user.email,
+        subject: "New Wink",
+        html: generateProfileWinkEmail(userId, profileId),
+        from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+      };
+      await sendMail(mailOptions);
+    }
+
+    // Emit real-time wink count update to the winked user
+    if (io) {
+      // Get updated total wink count for the winked user
+      const winkAggregation = await Wink.aggregate([
+        { $match: { winkedProfileId: new mongoose.Types.ObjectId(profileId) } },
+        { $group: { _id: null, total: { $sum: "$count" } } },
+      ]);
+      const totalWinks = winkAggregation?.[0]?.total || 0;
+
+      io.to(`user-${profileId}`).emit("wink-count-update", {
+        userId: profileId,
+        winkCount: totalWinks,
+      });
     }
 
     return { message: "Profile winked successfully", wink };
   } catch (error) {
     console.error("Error in winkProfile:", error);
     return { error: "Internal server error" };
+  }
+};
+
+const getOnlineUsers = async (req, res) => {
+  try {
+    const onlineUsers = await User.countDocuments({ isOnline: true });
+    // const onlineUsers = 1;
+    console.log("onlineUsers", onlineUsers);
+    res.json({ onlineUsers });
+  } catch (error) {
+    console.error("Error in getOnlineUsers:", error);
+    res.status(500).json({ error: "Server error while fetching online users" });
   }
 };
 
@@ -616,4 +666,5 @@ module.exports = {
   updateLocation,
   updateProfileSettings,
   winkProfile,
+  getOnlineUsers,
 };
