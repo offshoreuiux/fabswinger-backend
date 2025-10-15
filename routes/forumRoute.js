@@ -21,6 +21,7 @@ const {
   addComment,
   getComments,
   addPostView,
+  deletePost,
 } = require("../controllers/forum/postController");
 
 router.use(authenticateToken);
@@ -48,5 +49,6 @@ router.get("/post/:postId", getPostById);
 router.post("/post/comment", addComment);
 router.get("/post/comment/:postId", getComments);
 router.post("/post/view", addPostView);
+router.delete("/post/:postId", deletePost);
 
 module.exports = router;

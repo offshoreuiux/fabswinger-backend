@@ -116,9 +116,13 @@ const signup = async (req, res) => {
 
     // Generate token with different expiration based on keepSignedIn preference
     const tokenExpiration = keepSignedIn ? "30d" : "7d";
-    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
-      expiresIn: tokenExpiration,
-    });
+    const token = jwt.sign(
+      { userId: newUser._id, role: newUser.role },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: tokenExpiration,
+      }
+    );
 
     res.status(201).json({
       success: true,
@@ -129,6 +133,7 @@ const signup = async (req, res) => {
         id: newUser._id,
         username: newUser.username,
         email: newUser.email,
+        role: newUser.role,
       },
     });
   } catch (error) {
@@ -180,15 +185,24 @@ const login = async (req, res) => {
         .json({ error: "Invalid username/email or password" });
     }
 
+    // Block login for deactivated users
+    if (user.isActive === false) {
+      return res.status(403).json({ error: "Account is deactivated" });
+    }
+
     // Use user's keepSignedIn preference if not explicitly provided in login
     const shouldKeepSignedIn =
       keepSignedIn !== undefined ? keepSignedIn : user.keepSignedIn;
 
     // Generate token with different expiration based on keepSignedIn preference
     const tokenExpiration = shouldKeepSignedIn ? "30d" : "7d";
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
-      expiresIn: tokenExpiration,
-    });
+    const token = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: tokenExpiration,
+      }
+    );
     // Only save geoLocation if it is a valid GeoJSON Point
     if (
       geoLocation &&
@@ -209,6 +223,8 @@ const login = async (req, res) => {
         id: user._id,
         email: user.email,
         username: user.username,
+        role: user.role,
+        isActive: user.isActive,
       },
     });
   } catch (error) {
@@ -225,13 +241,20 @@ const verifyToken = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({
+    // Force logout if user got deactivated after token issuance
+    if (user.isActive === false) {
+      return res.status(403).json({ error: "Account is deactivated" });
+    }
+
+    res.status(200).json({
       user: {
         id: user._id,
         username: user.username,
         email: user.email,
         keepSignedIn: user.keepSignedIn,
         profileImage: user.profileImage,
+        role: user.role,
+        isActive: user.isActive,
       },
     });
   } catch (error) {
