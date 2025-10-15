@@ -454,6 +454,7 @@ const getClubs = async (req, res) => {
       total: totalCount,
       page,
       limit,
+      hasMore: clubs.length === parseInt(limit),
       totalPages: Math.ceil(totalCount / limit),
     });
   } catch (error) {
@@ -603,7 +604,7 @@ const deleteClub = async (req, res) => {
     }
     await Club.findByIdAndDelete(id);
     await ClubReview.deleteMany({ clubId: id });
-    
+
     res.status(200).json({
       message: "Club deleted successfully",
       club: club,
