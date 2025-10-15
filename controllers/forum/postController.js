@@ -149,6 +149,37 @@ const getPosts = async (req, res) => {
   });
 };
 
+const deletePost = async (req, res) => {
+  const { postId } = req.params;
+  if (!postId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Post ID is required" });
+  }
+  const post = await Post.findOne({ _id: postId });
+  if (!post) {
+    return res.status(404).json({ success: false, message: "Post not found" });
+  }
+  if (
+    post.createdBy.toString() !== req.user.userId &&
+    req.user.role !== "admin"
+  ) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not authorized to delete this post",
+    });
+  }
+  await Promise.all([
+    Post.findByIdAndDelete(postId),
+    Comment.deleteMany({ postId }),
+    Like.deleteMany({ postId }),
+    PostView.deleteMany({ postId }),
+  ]);
+  return res
+    .status(200)
+    .json({ success: true, message: "Post deleted successfully" });
+};
+
 const getPostByChannelId = async (req, res) => {
   const { channelId } = req.params;
   const { limit = 10, page = 1 } = req.query;
@@ -604,4 +635,5 @@ module.exports = {
   getComments,
   getNestedReplies,
   addPostView,
+  deletePost,
 };

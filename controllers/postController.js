@@ -695,7 +695,10 @@ const deletePost = async (req, res) => {
       return res.status(404).json({ error: "Post not found" });
     }
 
-    if (post.userId.toString() !== userId.toString()) {
+    if (
+      post.userId.toString() !== userId.toString() &&
+      req.user.role !== "admin"
+    ) {
       return res
         .status(403)
         .json({ error: "Unauthorized to delete this post" });
