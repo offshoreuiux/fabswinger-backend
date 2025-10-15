@@ -12,6 +12,7 @@ const {
   getProfiles,
   updateLocation,
   updateProfileSettings,
+  getOnlineUsers,
 } = require("../controllers/profileController");
 const upload = require("../middleware/upload");
 
@@ -34,7 +35,7 @@ router.put("/update-location", updateLocation);
 router.put("/password", updatePassword);
 
 // Get profile by ID (for viewing other users)
-router.get("/:id", getProfileById);
+router.get("/private/:id", getProfileById);
 
 // Update profile images
 router.put("/avatar", upload.single("avatar"), updateProfileImage);
@@ -43,5 +44,7 @@ router.put("/avatar", upload.single("avatar"), updateProfileImage);
 router.delete("/avatar", deleteProfileImage);
 
 router.put("/settings", updateProfileSettings);
+
+router.get("/online-users", getOnlineUsers);
 
 module.exports = router;

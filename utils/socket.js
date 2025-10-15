@@ -12,6 +12,10 @@ const {
 } = require("../controllers/postController");
 const { winkProfile } = require("../controllers/profileController");
 const NotificationService = require("../services/notificationService");
+// Track scheduled missed-message email timers per chat and recipient
+let pendingMissedEmailTimers = new Map(); // key: `${chatId}:${userId}` -> Timeout
+const { sendMail } = require("./transporter");
+const { generatePrivateMessageEmail } = require("./emailTemplates");
 
 let io;
 let onlineUsers = new Map(); // In-memory tracking for better performance
@@ -64,6 +68,9 @@ function initSocket(server) {
 
         // Only emit to relevant users (friends, people in same rooms, etc.)
         emitToRelevantUsers("user-online", { userId });
+
+        // Emit online count update to all connected users
+        io.emit("online-count-update", { count: onlineUsers.size });
 
         console.log(`User ${userId} joined their room`);
       } catch (error) {
@@ -206,30 +213,90 @@ function initSocket(server) {
           },
         };
 
-        // Increment unread count for all members except sender
+        // Increment unread count for all members except sender.
+        // Also detect transition from 0->1 to trigger missed-message email.
+        const shouldEmailForMember = {};
         chatMembers.forEach((memberId) => {
           updateData.$inc = updateData.$inc || {};
           updateData.$inc[`unreadCount.${memberId}`] = 1;
+          try {
+            let currentUnread = 0;
+            if (chatForUpdate && chatForUpdate.unreadCount) {
+              const uc = chatForUpdate.unreadCount;
+              if (typeof uc.get === "function") {
+                currentUnread = uc.get(memberId.toString()) || 0;
+              } else if (typeof uc === "object") {
+                currentUnread = uc[memberId.toString()] || 0;
+              }
+            }
+            if (!currentUnread || currentUnread === 0) {
+              shouldEmailForMember[memberId.toString()] = true;
+            }
+          } catch (_) {}
         });
 
         await Chat.findByIdAndUpdate(finalChatId, updateData);
 
-        // Send notifications to all members except sender
+        // Send in-app notifications to all members except sender
+        // And schedule a delayed email if the message remains unread for 15 minutes
         for (const memberId of chatMembers) {
           const user = await User.findById(memberId);
-          if (user?.settings?.getPrivateMessages) {
-            try {
-              await NotificationService.createPrivateMessageNotification(
-                senderId,
-                memberId,
-                finalChatId,
-                content
-              );
-            } catch (notificationError) {
-              console.error(
-                "Error creating message notification:",
-                notificationError
-              );
+          await NotificationService.createPrivateMessageNotification(
+            senderId,
+            memberId,
+            finalChatId,
+            content
+          );
+
+          // Schedule delayed email if user allows emails and they currently have 0->1 transition
+          if (
+            shouldEmailForMember[memberId.toString()] &&
+            user?.settings?.getPrivateMessages
+          ) {
+            const key = `${finalChatId}:${memberId.toString()}`;
+            if (!pendingMissedEmailTimers.has(key)) {
+              const timer = setTimeout(async () => {
+                try {
+                  // Check if still unread after delay
+                  const chatDoc = await Chat.findById(finalChatId).lean();
+                  let unreadForUser = 0;
+                  if (chatDoc?.unreadCount) {
+                    if (chatDoc.unreadCount.get) {
+                      unreadForUser =
+                        chatDoc.unreadCount.get(memberId.toString()) || 0;
+                    } else if (typeof chatDoc.unreadCount === "object") {
+                      unreadForUser =
+                        chatDoc.unreadCount[memberId.toString()] || 0;
+                    }
+                  }
+                  if (unreadForUser > 0) {
+                    try {
+                      const mailOptions = {
+                        to: user.email,
+                        subject: "You have unread messages",
+                        html: generatePrivateMessageEmail(
+                          senderId,
+                          memberId,
+                          finalChatId,
+                          content
+                        ),
+                        from:
+                          process.env.SENDGRID_FROM_EMAIL ||
+                          process.env.SMTP_USER,
+                      };
+                      await sendMail(mailOptions);
+                      console.log(`Missed message email sent to ${user.email}`);
+                    } catch (e) {
+                      console.error("Missed message email error:", e);
+                    }
+                  }
+                } catch (e) {
+                  console.error("Missed message check error:", e);
+                } finally {
+                  pendingMissedEmailTimers.delete(key);
+                }
+              }, 15 * 60 * 1000); // 15 minutes
+              pendingMissedEmailTimers.set(key, timer);
             }
           }
         }
@@ -262,12 +329,57 @@ function initSocket(server) {
       }
     });
 
+    // Mark a chat as read by a user: reset unreadCount for that user and mark messages read
+    socket.on("chat-mark-read", async ({ chatId, userId }) => {
+      try {
+        if (!chatId || !userId) return;
+        await Chat.findByIdAndUpdate(chatId, {
+          $set: { [`unreadCount.${userId}`]: 0 },
+        });
+        try {
+          await Message.updateMany(
+            { chatId, receiver: userId, status: { $ne: "read" } },
+            { $set: { status: "read" } }
+          );
+        } catch (_) {}
+        io.to(`user-${userId}`).emit("chat-unread-reset", { chatId, userId });
+      } catch (error) {
+        console.error("Error in chat-mark-read:", error);
+      }
+    });
+
     socket.on("wink-profile", async ({ profileId, userId }) => {
       try {
         console.log("Wink profile received:", { profileId, userId });
         await winkProfile({ profileId, userId, io });
       } catch (error) {
         console.error("Error handling wink profile:", error);
+      }
+    });
+
+    // Mark a chat as read by a user: reset unread count for that user and mark messages read
+    socket.on("chat-mark-read", async ({ chatId, userId }) => {
+      try {
+        if (!chatId || !userId) return;
+        await Chat.findByIdAndUpdate(chatId, {
+          $set: { [`unreadCount.${userId}`]: 0 },
+        });
+        try {
+          await Message.updateMany(
+            { chatId, receiver: userId, status: { $ne: "read" } },
+            { $set: { status: "read", isRead: true } }
+          );
+        } catch (_) {}
+        // Cancel any pending missed-email timer for this chat/user
+        const key = `${chatId}:${userId}`;
+        const t = pendingMissedEmailTimers.get(key);
+        if (t) {
+          clearTimeout(t);
+          pendingMissedEmailTimers.delete(key);
+        }
+        io.to(`user-${userId}`).emit("chat-unread-reset", { chatId, userId });
+      } catch (error) {
+        console.error("Error in chat-mark-read:", error);
       }
     });
 
@@ -566,6 +678,9 @@ function initSocket(server) {
 
         // Emit to relevant users only
         emitToRelevantUsers("user-offline", { userId });
+
+        // Emit online count update to all connected users
+        io.emit("online-count-update", { count: onlineUsers.size });
 
         console.log(`User ${userId} is now offline`);
       }

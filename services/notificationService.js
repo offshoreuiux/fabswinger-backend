@@ -1259,6 +1259,43 @@ class NotificationService {
       throw error;
     }
   }
+
+  // Daily matches digest (email-based)
+  static async sendDailyMatchesDigest({
+    transporter,
+    users,
+    getMatches,
+    generateEmail,
+  }) {
+    try {
+      if (!users || users.length === 0) return 0;
+      let sent = 0;
+      for (const user of users) {
+        try {
+          const matches = (await getMatches(user)) || [];
+          if (!matches.length) continue;
+          const html = generateEmail(user, matches);
+          await transporter.sendMail({
+            to: user.email,
+            subject: "Your Daily Matches",
+            html,
+            from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+          });
+          sent++;
+        } catch (err) {
+          console.error(
+            "Daily digest send error for",
+            user?._id,
+            err?.message || err
+          );
+        }
+      }
+      return sent;
+    } catch (error) {
+      console.error("sendDailyMatchesDigest error:", error);
+      return 0;
+    }
+  }
 }
 
 module.exports = NotificationService;

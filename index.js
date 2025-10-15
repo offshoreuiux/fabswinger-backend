@@ -26,6 +26,9 @@ const messageRoutes = require("./routes/chat/messageRoute");
 const forumRoutes = require("./routes/forumRoute");
 const countriesRoutes = require("./routes/countriesRoute");
 const adminRoutes = require("./routes/admin/adminRoute");
+const NotificationService = require("./services/notificationService");
+const { generateDailyMatchesEmail } = require("./utils/emailTemplates");
+const transporter = require("./utils/transporter");
 
 const app = express();
 const server = http.createServer(app);
@@ -63,10 +66,6 @@ app.use("/api/message", messageRoutes);
 app.use("/api/forum", forumRoutes);
 app.use("/api/countries", countriesRoutes);
 app.use("/api/admin", adminRoutes);
-
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
 
 // Seed default admin user if missing
 (async () => {
@@ -109,3 +108,78 @@ server.listen(PORT, () => {
     console.error("Admin seed error:", err?.message || err);
   }
 })();
+
+server.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
+
+// Schedule daily matches digest at 08:00 server time
+const scheduleDailyDigest = async () => {
+  try {
+    // Run once a day
+    setInterval(async () => {
+      try {
+        const users = await User.find({
+          "settings.newMembersMatchMyRequirements": true,
+          isActive: true,
+        }).select(
+          "_id email username ageRange lookingFor geoLocation preferences"
+        );
+
+        const getMatches = async (user) => {
+          // Simple matching: filter by lookingFor and age range; optionally add location later
+          const query = {
+            _id: { $ne: user._id },
+            gender: {
+              $in:
+                user.lookingFor && user.lookingFor.length
+                  ? user.lookingFor
+                  : ["man", "woman"],
+            },
+            age: {
+              $gte: user?.ageRange?.min || 18,
+              $lte: user?.ageRange?.max || 65,
+            },
+            isActive: true,
+          };
+          // Age is a virtual; approximate by DOB if available
+          const minDob = new Date();
+          minDob.setFullYear(
+            minDob.getFullYear() - (user?.ageRange?.max || 65)
+          );
+          const maxDob = new Date();
+          maxDob.setFullYear(
+            maxDob.getFullYear() - (user?.ageRange?.min || 18)
+          );
+
+          const dobQuery = { dateOfBirth: { $gte: minDob, $lte: maxDob } };
+
+          const matches = await User.find({
+            ...query,
+            ...dobQuery,
+          })
+            .limit(10)
+            .select("_id username nickname profileImage about");
+
+          return matches;
+        };
+
+        const sent = await NotificationService.sendDailyMatchesDigest({
+          transporter,
+          users,
+          getMatches,
+          generateEmail: generateDailyMatchesEmail,
+        });
+        if (sent) {
+          console.log(`Daily matches digest sent to ${sent} users`);
+        }
+      } catch (err) {
+        console.error("Daily digest scheduler error:", err?.message || err);
+      }
+    }, 24 * 60 * 60 * 1000); // every 24h
+  } catch (e) {
+    console.error("Failed to schedule daily digest:", e?.message || e);
+  }
+};
+
+scheduleDailyDigest();
