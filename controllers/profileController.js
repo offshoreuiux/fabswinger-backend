@@ -1,4 +1,4 @@
-const User = require("../models/UserSchema");
+const User = require("../models/user/userSchema");
 const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const { s3, getS3KeyFromUrl } = require("../utils/s3");
@@ -9,6 +9,7 @@ const Wink = require("../models/WinkSchema");
 const NotificationService = require("../services/notificationService");
 const { sendMail } = require("../utils/transporter");
 const { generateProfileWinkEmail } = require("../utils/emailTemplates");
+const UserReview = require("../models/user/UserReviewScehema");
 
 // Update user profile
 const updateProfile = async (req, res) => {
@@ -654,6 +655,76 @@ const getOnlineUsers = async (req, res) => {
   }
 };
 
+const createUserReview = async (req, res) => {
+  try {
+    const { reviewedId, review } = req.body;
+    const reviewerId = req.user.userId;
+    if (!reviewedId || !review) {
+      return res
+        .status(400)
+        .json({ error: "Reviewed ID and review are required" });
+    }
+    const reviewer = await User.findById(reviewerId);
+    if (!reviewer) {
+      return res.status(404).json({ error: "Reviewer not found" });
+    }
+    const reviewed = await User.findById(reviewedId);
+    if (!reviewed) {
+      return res.status(404).json({ error: "Reviewed not found" });
+    }
+    if (reviewer.id === reviewed.id) {
+      return res
+        .status(400)
+        .json({ error: "You cannot review your own profile" });
+    }
+    const userReview = await UserReview.create({
+      reviewerId,
+      reviewedId,
+      review,
+    });
+    try {
+      // Notify the reviewed user via service helper
+      await NotificationService.createUserReviewNotification(
+        reviewerId,
+        reviewedId,
+        userReview._id
+      );
+    } catch (notifyErr) {
+      console.error("Failed to create review notification:", notifyErr);
+      // Do not fail the request if notification fails
+    }
+
+    res.status(201).json({
+      message: "User review created successfully",
+      userReview,
+      success: true,
+    });
+  } catch (error) {
+    console.error("Error in createUserReview:", error);
+    res.status(500).json({
+      error: "Server error while creating user review",
+      message: error.message,
+    });
+  }
+};
+
+const getUserReviews = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+    const userReviews = await UserReview.find({ reviewedId: userId })
+      .populate("reviewerId", "username profileImage")
+      .populate("reviewedId", "username profileImage")
+      .sort({ createdAt: -1 });
+    res.status(200).json({ userReviews });
+  } catch (error) {
+    console.error("Error in getUserReviews:", error);
+    res.status(500).json({ error: "Server error while fetching user reviews" });
+  }
+};
+
 module.exports = {
   updateProfile,
   updatePassword,
@@ -667,4 +738,6 @@ module.exports = {
   updateProfileSettings,
   winkProfile,
   getOnlineUsers,
+  createUserReview,
+  getUserReviews,
 };

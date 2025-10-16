@@ -1,5 +1,5 @@
 const Notification = require("../models/NotificationSchema");
-const User = require("../models/UserSchema");
+const User = require("../models/user/userSchema");
 const Comment = require("../models/forum/PostCommentSchema");
 
 class NotificationService {
@@ -365,6 +365,46 @@ class NotificationService {
       return await this.createNotification(notificationData);
     } catch (error) {
       console.error("Error creating post comment notification:", error);
+      throw error;
+    }
+  }
+
+  // Create user review notification
+  static async createUserReviewNotification(reviewerId, reviewedId, reviewId) {
+    try {
+      if (reviewerId.toString() === reviewedId.toString()) {
+        return null; // don't notify self
+      }
+
+      const reviewer = await User.findById(reviewerId).select(
+        "nickname username profileImage"
+      );
+      if (!reviewer) throw new Error("Reviewer not found");
+
+      const viewReviewsLink = `<a href="#/profile?tab=Verification" class="text-sm font-semibold capitalize hover:text-blue-600 hover:underline">view your reviews</a>`;
+
+      const notificationData = {
+        recipient: reviewedId,
+        sender: reviewerId,
+        type: "user_review",
+        title: "New Review",
+        message: `${NotificationService.buildUserLink(
+          reviewer.nickname || reviewer.username,
+          reviewerId,
+          { type: "user_review" }
+        )} left you a review · ${viewReviewsLink}`,
+        relatedItem: reviewId,
+        relatedItemModel: "UserReview",
+        metadata: {
+          action: "view_profile_reviews",
+          profileId: reviewedId,
+          reviewId: reviewId,
+        },
+      };
+
+      return await this.createNotification(notificationData);
+    } catch (error) {
+      console.error("Error creating user review notification:", error);
       throw error;
     }
   }
