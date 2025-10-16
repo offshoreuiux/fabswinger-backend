@@ -1,4 +1,4 @@
-const User = require("../models/user/userSchema");
+const User = require("../models/user/UserSchema");
 
 const startVerifyUser = async (req, res) => {
   try {

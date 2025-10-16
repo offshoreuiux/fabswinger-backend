@@ -1,6 +1,6 @@
 const Friends = require("../models/FriendRequestSchema");
 const NotificationService = require("../services/notificationService");
-const User = require("../models/user/userSchema");
+const User = require("../models/user/UserSchema");
 const Notification = require("../models/NotificationSchema");
 const { sendMail } = require("../utils/transporter");
 const { generateFriendRequestEmail } = require("../utils/emailTemplates");
