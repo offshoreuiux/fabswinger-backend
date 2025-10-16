@@ -1,4 +1,4 @@
-const User = require("../../models/user/userSchema");
+const User = require("../../models/user/UserSchema");
 
 // GET /api/admin/users
 const listUsers = async (req, res) => {

@@ -1,5 +1,5 @@
 const Notification = require("../models/NotificationSchema");
-const User = require("../models/user/userSchema");
+const User = require("../models/user/UserSchema");
 const Comment = require("../models/forum/PostCommentSchema");
 
 class NotificationService {

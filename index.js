@@ -4,7 +4,7 @@ const connectDB = require("./db");
 const cors = require("cors");
 const http = require("http");
 const { initSocket, getIO } = require("./utils/socket");
-const User = require("./models/user/userSchema");
+const User = require("./models/user/UserSchema");
 const bcrypt = require("bcryptjs");
 
 const authRoutes = require("./routes/authRoute");

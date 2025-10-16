@@ -1,5 +1,5 @@
 const Club = require("../../models/club/ClubSchema");
-const User = require("../../models/user/userSchema");
+const User = require("../../models/user/UserSchema");
 const { s3 } = require("../../utils/s3");
 const { v4: uuidv4 } = require("uuid");
 const Event = require("../../models/event/EventSchema");

@@ -1,4 +1,4 @@
-const User = require("../models/user/userSchema");
+const User = require("../models/user/UserSchema");
 const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const { s3, getS3KeyFromUrl } = require("../utils/s3");
