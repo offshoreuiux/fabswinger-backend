@@ -4,7 +4,7 @@ const connectDB = require("./db");
 const cors = require("cors");
 const http = require("http");
 const { initSocket, getIO } = require("./utils/socket");
-const User = require("./models/UserSchema");
+const User = require("./models/user/userSchema");
 const bcrypt = require("bcryptjs");
 
 const authRoutes = require("./routes/authRoute");
@@ -26,6 +26,7 @@ const messageRoutes = require("./routes/chat/messageRoute");
 const forumRoutes = require("./routes/forumRoute");
 const countriesRoutes = require("./routes/countriesRoute");
 const adminRoutes = require("./routes/admin/adminRoute");
+const verificationRoutes = require("./routes/verificationRoutes");
 const NotificationService = require("./services/notificationService");
 const { generateDailyMatchesEmail } = require("./utils/emailTemplates");
 const transporter = require("./utils/transporter");
@@ -66,6 +67,7 @@ app.use("/api/message", messageRoutes);
 app.use("/api/forum", forumRoutes);
 app.use("/api/countries", countriesRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/verification", verificationRoutes);
 
 // Seed default admin user if missing
 (async () => {

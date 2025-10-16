@@ -13,6 +13,8 @@ const {
   updateLocation,
   updateProfileSettings,
   getOnlineUsers,
+  createUserReview,
+  getUserReviews,
 } = require("../controllers/profileController");
 const upload = require("../middleware/upload");
 
@@ -46,5 +48,9 @@ router.delete("/avatar", deleteProfileImage);
 router.put("/settings", updateProfileSettings);
 
 router.get("/online-users", getOnlineUsers);
+
+router.get("/reviews/:userId", getUserReviews);
+
+router.post("/reviews", createUserReview);
 
 module.exports = router;

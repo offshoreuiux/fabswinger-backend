@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require("uuid");
 const { s3, getS3KeyFromUrl } = require("../utils/s3");
 const mongoose = require("mongoose");
 const NotificationService = require("../services/notificationService");
-const User = require("../models/UserSchema");
+const User = require("../models/user/userSchema");
 const Friends = require("../models/FriendRequestSchema");
 const { getIO } = require("../utils/socket");
 

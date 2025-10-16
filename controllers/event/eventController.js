@@ -1,7 +1,7 @@
 const Event = require("../../models/event/EventSchema");
 const EventHotlist = require("../../models/hotlist/EventHotlistSchema");
 const EventParticipant = require("../../models/event/EventParticipantSchema");
-const User = require("../../models/UserSchema");
+const User = require("../../models/user/userSchema");
 const Friends = require("../../models/FriendRequestSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");

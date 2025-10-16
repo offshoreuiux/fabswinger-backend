@@ -1,4 +1,4 @@
-const User = require("../models/UserSchema");
+const User = require("../models/user/userSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");

@@ -1,5 +1,5 @@
 const { Server } = require("socket.io");
-const User = require("../models/UserSchema");
+const User = require("../models/user/userSchema");
 const Message = require("../models/chats/MessageSchema");
 const Friend = require("../models/FriendRequestSchema");
 const Chat = require("../models/chats/ChatSchema");
