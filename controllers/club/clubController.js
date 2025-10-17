@@ -121,7 +121,6 @@ const getClubs = async (req, res) => {
     const skip = (page - 1) * limit;
     const userId = req.user.userId;
     const { type, region, distance, discover, sort } = JSON.parse(filter);
-
     const query = {};
 
     if (type) query.type = type;
