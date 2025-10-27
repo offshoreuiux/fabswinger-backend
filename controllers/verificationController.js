@@ -1,6 +1,14 @@
 const User = require("../models/user/UserSchema");
+const Verification = require("../models/VerificationSchema");
+const { s3 } = require("../utils/s3");
+const { v4: uuidv4 } = require("uuid");
+const { sendMail } = require("../utils/transporter");
+const {
+  generateVerificationSubmittedEmail,
+  generateAdminVerificationNotificationEmail,
+} = require("../utils/emailTemplates");
 
-const startVerifyUser = async (req, res) => {
+const startAgeOver18VerifyUser = async (req, res) => {
   try {
     const { userId, email } = req.params;
 
@@ -23,59 +31,47 @@ const startVerifyUser = async (req, res) => {
       return res.status(500).json({ message: "BASE_URL is not configured" });
     }
 
+    const state = `${uuidv4()}}`;
+
     const url =
-      `https://controller.sandbox.myoneid.co.uk/v2/authorize?` +
+      `${process.env.ONEID_BASE_URL}/v2/authorize?` +
       new URLSearchParams({
         client_id: process.env.ONEID_CLIENT_ID,
-        redirect_uri: "https://verifiedswingers.vercel.app/",
+        redirect_uri: `${process.env.BASE_URL}/oauth-loading`,
         response_type: "code",
         scope: "openid age_over_18",
-        // state: JSON.stringify({
-        //   userId,
-        //   email,
-        //   timestamp: Date.now(),
-        // }),
         acr_values: "eidas2:LoA Substantial",
       });
 
     // Redirect user to OneID
     return res.status(200).json({ redirectUrl: url });
-    return res.redirect(url);
   } catch (err) {
     console.error("startVerifyUser error:", err?.message || err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
-const callbackVerifyUser = async (req, res) => {
-  const { code, state } = req.query;
-  if (!code || !state) {
+const callbackAgeOver18VerifyUser = async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
     return res.status(400).json({ message: "Missing code or state" });
   }
-  const stateData = JSON.parse(decodeURIComponent(state));
-  const { userId, email, timestamp } = stateData;
   try {
-    if (Date.now() - timestamp > 1000 * 60 * 15) {
-      // 15 minutes
-      return res.status(400).json({ message: "Verification link expired" });
-    }
-    const user = await User.findOne({ _id: userId, email: email });
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const response = await fetch(`https://connect.oneid.uk/token`, {
+    const response = await fetch(`${process.env.ONEID_BASE_URL}/token`, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
+        Authorization: `Basic ${Buffer.from(
+          `${process.env.ONEID_CLIENT_ID}:${process.env.ONEID_CLIENT_SECRET}`
+        ).toString("base64")}`,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
         client_id: process.env.ONEID_CLIENT_ID,
         client_secret: process.env.ONEID_CLIENT_SECRET,
         code,
-        redirect_uri: `${process.env.BASE_URL}/api/verification/callback`,
+        redirect_uri: `${process.env.BASE_URL}/oauth-loading`,
       }),
     });
     if (!response.ok) {
@@ -89,13 +85,16 @@ const callbackVerifyUser = async (req, res) => {
     }
 
     // 3. Get user info using access token with FETCH
-    const userInfoResponse = await fetch("https://connect.oneid.uk/userinfo", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        Accept: "application/json",
-      },
-    });
+    const userInfoResponse = await fetch(
+      `${process.env.ONEID_BASE_URL}/userinfo`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          Accept: "application/json",
+        },
+      }
+    );
 
     if (!userInfoResponse.ok) {
       const errorData = await userInfoResponse.json();
@@ -108,29 +107,165 @@ const callbackVerifyUser = async (req, res) => {
 
     const verificationData = await userInfoResponse.json();
 
-    if (!verificationData.verified) {
-      return res.status(400).json({ message: "User not verified" });
-    }
+    // if (!verificationData.verified) {
+    //   return res.status(400).json({ message: "User not verified" });
+    // }
 
-    user.isVerified = true;
-    await user.save();
-
-    return res
-      .status(302)
-      .redirect(
-        `${
-          process.env.FRONTEND_URL
-        }/dashboard?verified=true&name=${encodeURIComponent(
-          verificationData.name || "User"
-        )}&email=${encodeURIComponent(email)}`
-      );
+    return res.status(200).json({
+      message: "User age over 18 verified successfully",
+      verificationData,
+      success: true,
+    });
   } catch (error) {
     console.error("Error verifying user:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
+const userImageVerification = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { type = "user" } = req.body; // Default to "user" if not specified
+
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ message: "Verification image is required" });
+    }
+    const file = req.file;
+
+    // Check for existing pending verification
+    const existingVerification = await Verification.findOne({
+      $or: [
+        { userId: userId, type: "user" },
+        { clubId: userId, type: "club" },
+      ],
+      status: "pending",
+    });
+
+    if (existingVerification) {
+      return res
+        .status(400)
+        .json({ message: "Already has a pending verification" });
+    }
+
+    // Verify the entity exists
+    let entity;
+    if (type === "user") {
+      entity = await User.findById(userId);
+      if (!entity) {
+        return res.status(404).json({ message: "User not found" });
+      }
+    } else if (type === "club") {
+      // Assuming you have a Club model
+      const Club = require("../models/Club");
+      entity = await Club.findById(userId);
+      if (!entity) {
+        return res.status(404).json({ message: "Club not found" });
+      }
+    } else {
+      return res
+        .status(400)
+        .json({ message: "Invalid type. Must be 'user' or 'club'" });
+    }
+
+    const fileName = `verification-images/${uuidv4()}-${file.originalname}`;
+    const params = {
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: fileName,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    };
+    const uploadResult = await s3.upload(params).promise();
+
+    const verificationData = {
+      verificationImage: uploadResult.Location,
+      status: "pending",
+      type: type,
+    };
+
+    // Set the appropriate ID field based on type
+    if (type === "user") {
+      verificationData.userId = userId;
+    } else {
+      verificationData.clubId = userId;
+    }
+
+    const newVerification = new Verification(verificationData);
+    await newVerification.save();
+
+    // Send email notification
+    const email =
+      type === "user" ? entity.email : entity.contactEmail || entity.email;
+    const name = type === "user" ? entity.username : entity.name;
+
+    const mailOptions = {
+      to: email,
+      subject: "New Verification Submitted",
+      html: generateVerificationSubmittedEmail(name),
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+    };
+    const adminMailOptions = {
+      to: process.env.ADMIN_EMAIL,
+      subject: "New Verification Submitted",
+      html: generateAdminVerificationNotificationEmail(name, entity._id),
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+    };
+    await sendMail(mailOptions);
+    await sendMail(adminMailOptions);
+
+    return res
+      .status(200)
+      .json({ message: "Verification submitted successfully", success: true });
+  } catch (error) {
+    console.error("Error verifying user image:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+const clubVerification = async (req, res) => {
+  try {
+    const {
+      clubId,
+      type = "club",
+      clubName,
+      clubEmail,
+      clubPhone,
+      clubWebsite,
+      businessLicense,
+    } = req.body;
+    if (
+      !clubName ||
+      !clubEmail ||
+      !clubPhone ||
+      !clubWebsite ||
+      !businessLicense
+    ) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    const verificationData = {
+      clubId,
+      type,
+      clubName,
+      clubEmail,
+      clubPhone,
+      clubWebsite,
+      businessLicense,
+    };
+    const newVerification = new Verification(verificationData);
+    await newVerification.save();
+    return res
+      .status(200)
+      .json({ message: "Verification submitted successfully", success: true });
+  } catch (error) {
+    console.error("Error verifying club:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
-  startVerifyUser,
-  callbackVerifyUser,
+  startAgeOver18VerifyUser,
+  callbackAgeOver18VerifyUser,
+  userImageVerification,
+  clubVerification,
 };

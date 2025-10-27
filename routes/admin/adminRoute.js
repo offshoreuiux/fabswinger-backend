@@ -4,6 +4,9 @@ const { authenticateToken, requireAdmin } = require("../../middleware");
 const {
   listUsers,
   toggleUserActivation,
+  verifyVerification,
+  fetchVerificationRequests,
+  getVerificationStats,
 } = require("../../controllers/admin/adminController");
 const {
   createReport,
@@ -16,15 +19,16 @@ router.post("/reports", createReport);
 
 router.use(requireAdmin);
 
-// Admin-only: list all users with basic info
 router.get("/users", listUsers);
 
-// Admin-only: toggle user activation
 router.post("/users/:userId/toggle-user-activation", toggleUserActivation);
 
-// Admin-only: create report
-
-// Admin-only: get reports
 router.get("/reports", getReports);
+
+router.get("/users/verification-requests", fetchVerificationRequests);
+
+router.post("/users/:verificationId/verify-verification", verifyVerification);
+
+router.get("/verification-stats", getVerificationStats);
 
 module.exports = router;

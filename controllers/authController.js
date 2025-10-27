@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
 const { sendMail } = require("../utils/transporter");
-const nodemailer = require("nodemailer");
+const Verification = require("../models/VerificationSchema");
 
 // Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
 const fetch = globalThis.fetch || require("node-fetch");
@@ -112,28 +112,29 @@ const signup = async (req, res) => {
     });
     await newUser.save();
 
-    console.log("newUser", newUser);
+    // console.log("newUser", newUser);
 
     // Generate token with different expiration based on keepSignedIn preference
-    const tokenExpiration = keepSignedIn ? "30d" : "7d";
-    const token = jwt.sign(
-      { userId: newUser._id, role: newUser.role },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: tokenExpiration,
-      }
-    );
+    // const tokenExpiration = keepSignedIn ? "30d" : "7d";
+    // const token = jwt.sign(
+    //   { userId: newUser._id, role: newUser.role },
+    //   process.env.JWT_SECRET,
+    //   {
+    //     expiresIn: tokenExpiration,
+    //   }
+    // );
 
     res.status(201).json({
       success: true,
       message: "Signup successful",
-      token,
-      keepSignedIn: newUser.keepSignedIn,
+      // token,
+      // keepSignedIn: newUser.keepSignedIn,
       user: {
         id: newUser._id,
         username: newUser.username,
         email: newUser.email,
         role: newUser.role,
+        isVerified: newUser.isVerified,
       },
     });
   } catch (error) {
@@ -175,6 +176,37 @@ const login = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Invalid username/email or password" });
+    }
+
+    if (!user.isVerified && user.role != "admin") {
+      const hasAppliedForVerification = await Verification.findOne({
+        userId: user._id,
+        type: "user",
+        status: "pending",
+      });
+      if (hasAppliedForVerification) {
+        return res.status(400).json({
+          error:
+            "You have already applied for verification, please wait for approval",
+        });
+      } else {
+        const verification = await Verification.findOne({
+          userId: user._id,
+          type: "user",
+          status: "rejected",
+        });
+        if (verification) {
+          return res.status(400).json({
+            error:
+              "Your verification request has been rejected, please apply for verification again",
+          });
+        } else {
+          return res.status(400).json({
+            error:
+              "You have not applied for verification yet, please apply for verification now",
+          });
+        }
+      }
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -225,6 +257,7 @@ const login = async (req, res) => {
         username: user.username,
         role: user.role,
         isActive: user.isActive,
+        isVerified: user.isVerified,
       },
     });
   } catch (error) {
@@ -246,6 +279,12 @@ const verifyToken = async (req, res) => {
       return res.status(403).json({ error: "Account is deactivated" });
     }
 
+    if (!user.isVerified && user.role != "admin") {
+      return res.status(400).json({
+        error: "You are not verified yet, please wait for verification",
+      });
+    }
+
     res.status(200).json({
       user: {
         id: user._id,
@@ -255,6 +294,7 @@ const verifyToken = async (req, res) => {
         profileImage: user.profileImage,
         role: user.role,
         isActive: user.isActive,
+        isVerified: user.isVerified,
       },
     });
   } catch (error) {

@@ -224,7 +224,7 @@ const getProfiles = async (req, res) => {
       } = JSON.parse(filters);
 
       if (whomYouAreLookingFor && whomYouAreLookingFor.length > 0) {
-        query.lookingFor = { $in: whomYouAreLookingFor };
+        query.gender = { $in: whomYouAreLookingFor };
       }
       if (whoWantsToMeet && whoWantsToMeet.length > 0) {
         query.lookingFor = { $in: whoWantsToMeet };
@@ -311,6 +311,7 @@ const getProfiles = async (req, res) => {
 
     // Only show profiles where profileVisibility is true
     query["settings.profileVisibility"] = true;
+    query.role = "user";
 
     // Get total count for pagination info
     const totalCount = await User.countDocuments(query);

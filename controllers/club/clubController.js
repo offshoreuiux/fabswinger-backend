@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require("uuid");
 const Event = require("../../models/event/EventSchema");
 const Meet = require("../../models/meet/MeetSchema");
 const ClubReview = require("../../models/club/ClubReviewSchema");
+const mongoose = require("mongoose");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
@@ -19,7 +20,6 @@ const createClub = async (req, res) => {
       clubEmail,
       phone,
       people,
-      isOwner,
     } = req.body;
     const owner = req.user.userId;
     const image = req.file;
@@ -120,11 +120,14 @@ const getClubs = async (req, res) => {
     } = req.query;
     const skip = (page - 1) * limit;
     const userId = req.user.userId;
+    console.log("userId===========", userId);
     const { type, region, distance, discover, sort } = JSON.parse(filter);
     const query = {};
 
     if (type) query.type = type;
     if (region) query.region = region;
+
+    // query.$or = [{ isVerified: true }, { owner: userId }];
 
     // Handle distance filter with geoWithin
     if (distance && distance !== "all") {
@@ -151,9 +154,17 @@ const getClubs = async (req, res) => {
     }
 
     if (discover) {
-      if (discover === "all") query.owner = { $exists: true };
-      else if (discover === "me") query.owner = userId;
-      else if (discover === "others") query.owner = { $nin: [userId] };
+      if (discover === "all") {
+        query.$or = [
+          { isVerified: true },
+          { owner: new mongoose.Types.ObjectId(userId) },
+        ];
+      } else if (discover === "me") {
+        query.owner = userId;
+      } else if (discover === "others") {
+        query.owner = { $nin: [userId] };
+        query.isVerified = true;
+      }
     }
 
     let clubs = [];
@@ -179,9 +190,14 @@ const getClubs = async (req, res) => {
         },
         {
           $match: {
-            ...query,
-            name: { $regex: search, $options: "i" },
-            location: { $regex: location, $options: "i" },
+            $and: [
+              { name: { $regex: search, $options: "i" } },
+              { location: { $regex: location, $options: "i" } },
+              {
+                $or: [{ isVerified: true }, { owner: new mongoose.Types.ObjectId(userId) }],
+              },
+            ],
+            ...query, // like region, type, geo filters if needed
           },
         },
         {
@@ -225,8 +241,17 @@ const getClubs = async (req, res) => {
         {
           $match: {
             ...query,
-            name: { $regex: search, $options: "i" },
-            location: { $regex: location, $options: "i" },
+            $and: [
+              {
+                name: { $regex: search, $options: "i" },
+              },
+              {
+                location: { $regex: location, $options: "i" },
+              },
+              {
+                $or: [{ isVerified: true }, { owner: new mongoose.Types.ObjectId(userId) }],
+              },
+            ],
           },
         },
         {
@@ -408,6 +433,10 @@ const getClubs = async (req, res) => {
         location: { $regex: location, $options: "i" },
         region: { $regex: regionSearch, $options: "i" },
         name: { $regex: search, $options: "i" },
+        $or: [
+          { isVerified: true },
+          { owner: new mongoose.Types.ObjectId(userId) },
+        ],
         ...query,
       };
 
@@ -447,6 +476,8 @@ const getClubs = async (req, res) => {
         });
       }
     }
+
+    console.log("clubs===========", query);
 
     res.status(200).json({
       clubs,
