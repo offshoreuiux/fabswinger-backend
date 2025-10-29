@@ -17,6 +17,11 @@ const userReviewSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    verificationType: {
+      type: String,
+      enum: ["webcam", "face-to-face"],
+      required: true,
+    },
   },
   { timestamps: true }
 );

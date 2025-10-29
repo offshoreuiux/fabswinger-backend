@@ -1,6 +1,175 @@
 // Email templates for VerifiedSwingers
 const dotenv = require("dotenv");
 dotenv.config();
+
+/**
+ * Generate affiliate registration success email
+ * @param {string} username - The user's username
+ * @param {string} referralCode - The generated referral code
+ */
+const generateAffiliateRegistrationEmail = (username, referralCode) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Affiliate Registration Successful</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f4f4f4; margin:0; padding:0; color:#111827; }
+        .container { max-width:600px; margin:24px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); color:#fff; padding:24px; text-align:center; }
+        .content { padding:24px; }
+        .code { display:inline-block; padding:10px 16px; border-radius:9999px; background:#fef3c7; color:#92400e; font-weight:700; letter-spacing:1px; }
+        .card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:16px; margin-top:16px; }
+        .cta { display:inline-block; margin-top:18px; background:linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color:#fff; text-decoration:none; padding:10px 18px; border-radius:9999px; font-weight:600; }
+        .footer { padding:16px 24px; text-align:center; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb; background:#f9fafb; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 You're an Affiliate, ${username}!</h1>
+        </div>
+        <div class="content">
+          <p>Welcome to the VerifiedSwingers Affiliate Program. Your registration was successful.</p>
+          <div class="card">
+            <div style="font-weight:600; margin-bottom:6px;">Your Referral Code</div>
+            <div class="code">${referralCode}</div>
+            <p style="margin-top:12px; color:#374151; font-size:14px;">Share this code or your referral link to earn commissions when new users subscribe.</p>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:600; margin-bottom:6px;">Your Referral Link</div>
+            <a
+              href="${process.env.FRONTEND_URL}/#/signup?ref=${referralCode}"
+              style="display:inline-block; color:#1d4ed8; text-decoration:underline; word-break:break-all;"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ${process.env.FRONTEND_URL}/#/signup?ref=${referralCode}
+            </a>
+            <p style="margin-top:12px; color:#374151; font-size:14px;">Send this link to people you invite. When they sign up and subscribe, you earn commission.</p>
+          </div>
+          <a class="cta" href="${
+            process.env.FRONTEND_URL
+          }/#/affiliate">Open Affiliate Dashboard</a>
+          <div class="card" style="margin-top:16px;">
+            <div style="font-weight:600; margin-bottom:6px;">Tips to get started</div>
+            <ul style="margin:0; padding-left:18px; color:#374151; font-size:14px;">
+              <li>Post your referral link on social media and forums</li>
+              <li>Add the link to your profile bio</li>
+              <li>Share with friends who might be interested</li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer">
+          © ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate new referral commission earned email
+ * @param {string} referredUsername - Referred user's username
+ * @param {string} referralCode - Affiliate referral code used
+ */
+const generateNewReferralCommissionEarnedEmail = (
+  referredUsername,
+  referralCode
+) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>New Referral Commission Earned</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f4f4f4; margin:0; padding:0; color:#111827; }
+        .container { max-width:600px; margin:24px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; padding:24px; text-align:center; }
+        .content { padding:24px; }
+        .highlight { background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:16px; }
+        .footer { padding:16px 24px; text-align:center; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb; background:#f9fafb; }
+        .cta { display:inline-block; margin-top:16px; background:linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); color:#111827; text-decoration:none; padding:10px 18px; border-radius:9999px; font-weight:700; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>💸 New Commission Earned</h1>
+        </div>
+        <div class="content">
+          <p>Great news! Someone used your referral code <strong>${referralCode}</strong>.</p>
+          <div class="highlight" style="margin-top:12px;">
+            <div style="font-weight:600; margin-bottom:6px;">Referral Details</div>
+            <div style="font-size:14px; color:#065f46;">Referred user: <strong>${referredUsername}</strong></div>
+            <div style="font-size:14px; color:#065f46;">Status: Tracked</div>
+          </div>
+          <a class="cta" href="${
+            process.env.FRONTEND_URL
+          }/#/affiliate">View Affiliate Dashboard</a>
+          <p style="font-size:13px; color:#6b7280; margin-top:10px;">Commission will be updated upon subscription confirmation (if applicable).</p>
+        </div>
+        <div class="footer">
+          © ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate affiliate commission payout email
+ * @param {string} username - Affiliate username
+ * @param {number} amount - Payout amount in minor currency units (e.g., pence)
+ */
+const generateAffiliateCommissionPayoutEmail = (username, amount) => {
+  const majorAmount = (Number(amount || 0) / 100).toFixed(2);
+  const currency = (process.env.DEFAULT_CURRENCY || "GBP").toUpperCase();
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Affiliate Commission Payout</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f4f4f4; margin:0; padding:0; color:#111827; }
+        .container { max-width:600px; margin:24px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color:#fff; padding:24px; text-align:center; }
+        .content { padding:24px; }
+        .summary { background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px; padding:16px; }
+        .footer { padding:16px 24px; text-align:center; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb; background:#f9fafb; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>✅ Commission Payout Processed</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${username},</p>
+          <p>Your affiliate commission payout has been processed successfully.</p>
+          <div class="summary" style="margin-top:12px;">
+            <div style="font-weight:600; margin-bottom:6px;">Payout Summary</div>
+            <div style="font-size:14px; color:#1f2937;">Amount: <strong>${currency} ${majorAmount}</strong></div>
+            <div style="font-size:12px; color:#6b7280; margin-top:6px;">Funds may take 3-5 business days to arrive depending on your bank.</div>
+          </div>
+        </div>
+        <div class="footer">
+          © ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
 /**
  * Generate password reset email template
  * @param {string} code - The 6-digit reset code
@@ -627,6 +796,529 @@ const generatePrivateMessageEmail = (senderId, receiverId, chatId, content) => {
   `;
 };
 
+/**
+ * Generate verification submission confirmation email
+ * @param {string} username - User's username
+ * @returns {string} HTML email template
+ */
+const generateVerificationSubmittedEmail = (username) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Verification Submitted - VerifiedSwingers</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .highlight { background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #eacd48; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📸 Verification Submitted</h1>
+        </div>
+        <div class="content">
+          <div class="icon">✅</div>
+          <h2>Hello ${username}!</h2>
+          <p>Thank you for submitting your verification documents. We have received your submission and our team will review it shortly.</p>
+          
+          <div class="highlight">
+            <h3>What happens next?</h3>
+            <ul style="text-align: left; margin: 0; padding-left: 20px;">
+              <li>Our verification team will review your documents</li>
+              <li>You'll receive an email notification once the review is complete</li>
+              <li>If approved, you'll gain access to the website</li>
+              <li>If additional information is needed, we'll contact you directly</li>
+            </ul>
+          </div>
+          
+          <p><strong>Review Time:</strong> Typically 24-48 hours</p>
+          <p>You can check your verification status by trying to login to your account.</p>
+        </div>
+        <div class="footer">
+          <p>Thank you for helping us maintain a safe and authentic community!</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate verification approved email
+ * @param {string} username - User's username
+ * @returns {string} HTML email template
+ */
+const generateVerificationApprovedEmail = (username) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Verification Approved - VerifiedSwingers</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .celebration { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #f59e0b; }
+        .benefits { background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 24px; font-weight: bold; margin: 10px; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 Verification Approved!</h1>
+        </div>
+        <div class="content">
+          <div class="icon">✅</div>
+          <h2>Congratulations ${username}!</h2>
+          
+          <div class="celebration">
+            <h3>🎊 You're Now Verified! 🎊</h3>
+            <p>Your verification has been approved! Welcome to the VerifiedSwingers community.</p>
+          </div>
+          
+          <div class="benefits">
+            <h3>🌟 What you can do now:</h3>
+            <ul style="text-align: left; margin: 0; padding-left: 20px;">
+              <li>Access all premium features</li>
+              <li>Create and join events</li>
+              <li>Send unlimited messages</li>
+              <li>Upload more photos and videos</li>
+              <li>See who viewed your profile</li>
+              <li>Join group chats</li>
+              <li>And much more!</li>
+            </ul>
+          </div>
+          
+          <p style="margin-top: 30px;">
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/profile" class="cta-button">View Your Profile</a>
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/browse" class="cta-button">Start Browsing</a>
+          </p>
+        </div>
+        <div class="footer">
+          <p>Thank you for being part of our verified community!</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate verification rejected email
+ * @param {string} username - User's username
+ * @param {string} reason - Rejection reason
+ * @returns {string} HTML email template
+ */
+const generateVerificationRejectedEmail = (username, reason = "") => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Verification Update - VerifiedSwingers</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .notice { background-color: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b; }
+        .help { background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 24px; font-weight: bold; margin: 10px; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📋 Verification Update</h1>
+        </div>
+        <div class="content">
+          <div class="icon">📝</div>
+          <h2>Hello ${username},</h2>
+          <p>We've reviewed your verification submission and need some additional information to complete the process.</p>
+          
+          <div class="notice">
+            <h3>📌 What we need:</h3>
+            ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+            <p>Please ensure your verification documents are:</p>
+            <ul style="text-align: left; margin: 0; padding-left: 20px;">
+              <li>Clear and readable</li>
+              <li>Valid and current</li>
+              <li>Show your full name and photo</li>
+              <li>Not edited or filtered</li>
+            </ul>
+          </div>
+          
+          <div class="help">
+            <h3>💡 Need help?</h3>
+            <p>If you have questions about the verification process, please contact our support team. We're here to help!</p>
+          </div>
+          
+          <p style="margin-top: 30px;">
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/profile" class="cta-button">Resubmit Verification</a>
+            <a href="mailto:support@verifiedswingers.com" class="cta-button">Contact Support</a>
+          </p>
+        </div>
+        <div class="footer">
+          <p>We appreciate your patience as we work to verify all members.</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate admin notification for new verification submission
+ * @param {string} username - User's username
+ * @param {string} userId - User's ID
+ * @returns {string} HTML email template
+ */
+const generateAdminVerificationNotificationEmail = (username, userId) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New Verification Submission - Admin</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .alert { background-color: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b; }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 24px; font-weight: bold; margin: 10px; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🔔 New Verification Submission</h1>
+        </div>
+        <div class="content">
+          <div class="icon">📋</div>
+          <h2>Admin Notification</h2>
+          <p>A new verification submission requires your review.</p>
+          
+          <div class="alert">
+            <h3>📝 Submission Details:</h3>
+            <p><strong>User:</strong> ${username}</p>
+            <p><strong>User ID:</strong> ${userId}</p>
+            <p><strong>Submitted:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          
+          <p>Please review the submission in the admin panel.</p>
+          
+          <p style="margin-top: 30px;">
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/admin/verifications" class="cta-button">Review Submission</a>
+          </p>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification for admin users.</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate club verification submission confirmation email
+ * @param {string} clubName - Club's name
+ * @returns {string} HTML email template
+ */
+const generateClubVerificationSubmittedEmail = (clubName) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Club Verification Submitted - VerifiedSwingers</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .highlight { background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #eacd48; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🏢 Club Verification Submitted</h1>
+        </div>
+        <div class="content">
+          <div class="icon">✅</div>
+          <h2>Hello ${clubName}!</h2>
+          <p>Thank you for submitting your club verification documents. We have received your submission and our team will review it shortly.</p>
+          
+          <div class="highlight">
+            <h3>What happens next?</h3>
+            <ul style="text-align: left; margin: 0; padding-left: 20px;">
+              <li>Our verification team will review your business documents</li>
+              <li>We'll verify your business license and contact information</li>
+              <li>You'll receive an email notification once the review is complete</li>
+              <li>If approved, your club will be featured on our platform</li>
+              <li>If additional information is needed, we'll contact you directly</li>
+            </ul>
+          </div>
+          
+          <p><strong>Review Time:</strong> Typically 2-3 business days</p>
+          <p>You can check your verification status by logging into your club account.</p>
+        </div>
+        <div class="footer">
+          <p>Thank you for helping us maintain a safe and authentic community!</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate club verification approved email
+ * @param {string} clubName - Club's name
+ * @returns {string} HTML email template
+ */
+const generateClubVerificationApprovedEmail = (clubName) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Club Verification Approved - VerifiedSwingers</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .celebration { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px solid #f59e0b; }
+        .benefits { background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 24px; font-weight: bold; margin: 10px; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 Club Verification Approved!</h1>
+        </div>
+        <div class="content">
+          <div class="icon">✅</div>
+          <h2>Congratulations ${clubName}!</h2>
+          
+          <div class="celebration">
+            <h3>🎊 Your Club is Now Verified! 🎊</h3>
+            <p>Your club verification has been approved! Welcome to the VerifiedSwingers community.</p>
+          </div>
+          
+          <div class="benefits">
+            <h3>🌟 What your club can do now:</h3>
+            <ul style="text-align: left; margin: 0; padding-left: 20px;">
+              <li>Create and manage events</li>
+              <li>Attract verified members</li>
+              <li>Showcase your club with verified badge</li>
+              <li>Access premium club features</li>
+              <li>Manage member reviews</li>
+              <li>Promote special events</li>
+              <li>And much more!</li>
+            </ul>
+          </div>
+          
+          <p style="margin-top: 30px;">
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/club/dashboard" class="cta-button">Club Dashboard</a>
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/club/create-event" class="cta-button">Create Event</a>
+          </p>
+        </div>
+        <div class="footer">
+          <p>Thank you for being part of our verified community!</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate club verification rejected email
+ * @param {string} clubName - Club's name
+ * @param {string} reason - Rejection reason
+ * @returns {string} HTML email template
+ */
+const generateClubVerificationRejectedEmail = (clubName, reason = "") => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Club Verification Update - VerifiedSwingers</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .notice { background-color: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b; }
+        .help { background-color: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 24px; font-weight: bold; margin: 10px; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📋 Club Verification Update</h1>
+        </div>
+        <div class="content">
+          <div class="icon">📝</div>
+          <h2>Hello ${clubName},</h2>
+          <p>We've reviewed your club verification submission and need some additional information to complete the process.</p>
+          
+          <div class="notice">
+            <h3>📌 What we need:</h3>
+            ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ""}
+            <p>Please ensure your verification documents are:</p>
+            <ul style="text-align: left; margin: 0; padding-left: 20px;">
+              <li>Valid business license</li>
+              <li>Clear contact information</li>
+              <li>Accurate club details</li>
+              <li>Proper website and social media links</li>
+            </ul>
+          </div>
+          
+          <div class="help">
+            <h3>💡 Need help?</h3>
+            <p>If you have questions about the club verification process, please contact our support team. We're here to help!</p>
+          </div>
+          
+          <p style="margin-top: 30px;">
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/club/verification" class="cta-button">Resubmit Verification</a>
+            <a href="mailto:support@verifiedswingers.com" class="cta-button">Contact Support</a>
+          </p>
+        </div>
+        <div class="footer">
+          <p>We appreciate your patience as we work to verify all clubs.</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate admin notification for new club verification submission
+ * @param {string} clubName - Club's name
+ * @param {string} clubId - Club's ID
+ * @returns {string} HTML email template
+ */
+const generateAdminClubVerificationNotificationEmail = (clubName, clubId) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>New Club Verification Submission - Admin</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .header { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; font-weight: bold; }
+        .content { padding: 40px 30px; text-align: center; }
+        .icon { font-size: 48px; margin-bottom: 20px; }
+        .alert { background-color: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b; }
+        .cta-button { display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 24px; font-weight: bold; margin: 10px; }
+        .footer { background-color: #f8f9fa; padding: 20px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e9ecef; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🏢 New Club Verification Submission</h1>
+        </div>
+        <div class="content">
+          <div class="icon">📋</div>
+          <h2>Admin Notification</h2>
+          <p>A new club verification submission requires your review.</p>
+          
+          <div class="alert">
+            <h3>📝 Submission Details:</h3>
+            <p><strong>Club:</strong> ${clubName}</p>
+            <p><strong>Club ID:</strong> ${clubId}</p>
+            <p><strong>Submitted:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          
+          <p>Please review the club verification submission in the admin panel.</p>
+          
+          <p style="margin-top: 30px;">
+            <a href="${
+              process.env.FRONTEND_URL
+            }/#/admin/club-verifications" class="cta-button">Review Club Submission</a>
+          </p>
+        </div>
+        <div class="footer">
+          <p>This is an automated notification for admin users.</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 module.exports = {
   generatePasswordResetEmail,
   generateWelcomeEmail,
@@ -635,4 +1327,15 @@ module.exports = {
   generateFriendRequestEmail,
   generateDailyMatchesEmail,
   generatePrivateMessageEmail,
+  generateVerificationSubmittedEmail,
+  generateVerificationApprovedEmail,
+  generateVerificationRejectedEmail,
+  generateAdminVerificationNotificationEmail,
+  generateClubVerificationSubmittedEmail,
+  generateClubVerificationApprovedEmail,
+  generateClubVerificationRejectedEmail,
+  generateAdminClubVerificationNotificationEmail,
+  generateAffiliateRegistrationEmail,
+  generateNewReferralCommissionEarnedEmail,
+  generateAffiliateCommissionPayoutEmail,
 };

@@ -132,9 +132,35 @@ const getProfile = async (req, res) => {
     ]);
     const totalWinks = winkAggregation?.[0]?.total || 0;
 
+    const reviews = await UserReview.find({ reviewedId: userId })
+      .populate("reviewerId", "username profileImage gender")
+      .populate("reviewedId", "username profileImage gender")
+      .sort({ createdAt: -1 });
+    const reviewSummary = reviews.reduce((acc, review) => {
+      acc[review.verificationType] = (acc[review.verificationType] || 0) + 1;
+      return acc;
+    }, {});
+    const reviewDoneBy = reviews.reduce((acc, cur) => {
+      acc[cur.reviewerId.gender] = (acc[cur.reviewerId.gender] || 0) + 1;
+      return acc;
+    }, {});
+    const reviewDoneByData = {
+      male: reviewDoneBy.man || 0,
+      female: reviewDoneBy.woman || 0,
+      couple:
+        reviewDoneBy.coupleMF + reviewDoneBy.coupleMM + reviewDoneBy.coupleFF ||
+        0,
+    };
+    const reviewSummaryData = {
+      webcam: reviewSummary.webcam || 0,
+      faceToFace: reviewSummary?.["face-to-face"] || 0,
+      reviewDoneBy: reviewDoneByData,
+    };
+
     const userWithWinkCount = {
       ...user.toObject(),
       winkCount: totalWinks,
+      reviewSummary: reviewSummaryData,
     };
 
     res.json({ user: userWithWinkCount });
@@ -224,7 +250,7 @@ const getProfiles = async (req, res) => {
       } = JSON.parse(filters);
 
       if (whomYouAreLookingFor && whomYouAreLookingFor.length > 0) {
-        query.lookingFor = { $in: whomYouAreLookingFor };
+        query.gender = { $in: whomYouAreLookingFor };
       }
       if (whoWantsToMeet && whoWantsToMeet.length > 0) {
         query.lookingFor = { $in: whoWantsToMeet };
@@ -311,6 +337,7 @@ const getProfiles = async (req, res) => {
 
     // Only show profiles where profileVisibility is true
     query["settings.profileVisibility"] = true;
+    query.role = "user";
 
     // Get total count for pagination info
     const totalCount = await User.countDocuments(query);
@@ -417,6 +444,35 @@ const getProfileById = async (req, res) => {
       };
     } else {
       userWithRequest.friendRequest = null;
+    }
+    if (user.settings.reviewVisibility) {
+      const reviews = await UserReview.find({ reviewedId: id })
+        .populate("reviewerId", "username profileImage gender")
+        .populate("reviewedId", "username profileImage gender")
+        .sort({ createdAt: -1 });
+      const reviewSummary = reviews.reduce((acc, review) => {
+        acc[review.verificationType] = (acc[review.verificationType] || 0) + 1;
+        return acc;
+      }, {});
+      const reviewDoneBy = reviews.reduce((acc, cur) => {
+        acc[cur.reviewerId.gender] = (acc[cur.reviewerId.gender] || 0) + 1;
+        return acc;
+      }, {});
+      const reviewDoneByData = {
+        male: reviewDoneBy.man || 0,
+        female: reviewDoneBy.woman || 0,
+        couple:
+          reviewDoneBy.coupleMF +
+            reviewDoneBy.coupleMM +
+            reviewDoneBy.coupleFF || 0,
+      };
+      const reviewSummaryData = {
+        webcam: reviewSummary.webcam || 0,
+        faceToFace: reviewSummary?.["face-to-face"] || 0,
+        reviewDoneBy: reviewDoneByData,
+      };
+
+      userWithRequest.reviewSummary = reviewSummaryData;
     }
 
     res.json({ user: userWithRequest });
@@ -657,12 +713,12 @@ const getOnlineUsers = async (req, res) => {
 
 const createUserReview = async (req, res) => {
   try {
-    const { reviewedId, review } = req.body;
+    const { reviewedId, review, verificationType } = req.body;
     const reviewerId = req.user.userId;
-    if (!reviewedId || !review) {
-      return res
-        .status(400)
-        .json({ error: "Reviewed ID and review are required" });
+    if (!reviewedId || !review || !verificationType) {
+      return res.status(400).json({
+        error: "Reviewed ID, review and verification type are required",
+      });
     }
     const reviewer = await User.findById(reviewerId);
     if (!reviewer) {
@@ -681,6 +737,7 @@ const createUserReview = async (req, res) => {
       reviewerId,
       reviewedId,
       review,
+      verificationType,
     });
     try {
       // Notify the reviewed user via service helper
@@ -694,9 +751,13 @@ const createUserReview = async (req, res) => {
       // Do not fail the request if notification fails
     }
 
+    const reviewData = await UserReview.findById(userReview._id)
+      .populate("reviewerId", "username profileImage")
+      .populate("reviewedId", "username profileImage");
+
     res.status(201).json({
       message: "User review created successfully",
-      userReview,
+      review: reviewData,
       success: true,
     });
   } catch (error) {
@@ -718,6 +779,7 @@ const getUserReviews = async (req, res) => {
       .populate("reviewerId", "username profileImage")
       .populate("reviewedId", "username profileImage")
       .sort({ createdAt: -1 });
+    console.log("userReviews", userReviews);
     res.status(200).json({ userReviews });
   } catch (error) {
     console.error("Error in getUserReviews:", error);

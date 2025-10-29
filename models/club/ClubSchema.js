@@ -57,6 +57,7 @@ const clubSchema = new mongoose.Schema(
     },
     isVerified: {
       type: Boolean,
+      enum: [true, false, "pending"],
       default: false,
     },
     image: {

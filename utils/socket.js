@@ -84,10 +84,10 @@ function initSocket(server) {
         const { chatId, senderId, receiverId, content, type, tempId } = data;
 
         // Validate required fields
-        if (!senderId || !content || !type) {
+        if (!senderId || !content || !type || !receiverId) {
           socket.emit("message-error", {
             message:
-              "Missing required fields: senderId, content, and type are required",
+              "Missing required fields: senderId, content, type, and receiverId are required",
           });
           return;
         }

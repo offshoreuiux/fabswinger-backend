@@ -4,6 +4,21 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema(
   {
     // Basic authentication info
+    stripeCustomerId: {
+      type: String,
+      default: null,
+      required: false,
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: null,
+      required: false,
+    },
+    stripeAccountId: {
+      type: String,
+      default: null,
+      required: false,
+    },
     username: {
       type: String,
       required: true,
@@ -274,11 +289,12 @@ const userSchema = new mongoose.Schema(
         getFriendInvites: true,
         newMembersMatchMyRequirements: true,
         profileVisibility: true,
-        whosLookedAtMe: true,
+        // whosLookedAtMe: true,
         friendsListVisibility: true,
         photoFabFeature: true,
         nonMemberVisibility: true,
-        chatCameraVisibility: true,
+        reviewVisibility: true,
+        // chatCameraVisibility: true,
       },
     },
     passwordResetCode: {
