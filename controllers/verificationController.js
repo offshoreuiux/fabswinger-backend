@@ -77,7 +77,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
         client_id: process.env.ONEID_CLIENT_ID,
         client_secret: process.env.ONEID_CLIENT_SECRET,
         code,
-        redirect_uri: `${process.env.BASE_URL}/oauth-loading`,
+        redirect_uri: `${process.env.FRONTEND_URL}/#/oneid-loading`,
       }),
     });
     if (!response.ok) {
