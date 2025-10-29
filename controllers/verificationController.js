@@ -1,11 +1,14 @@
 const User = require("../models/user/UserSchema");
 const Verification = require("../models/VerificationSchema");
+const Club = require("../models/club/ClubSchema");
 const { s3 } = require("../utils/s3");
 const { v4: uuidv4 } = require("uuid");
 const { sendMail } = require("../utils/transporter");
 const {
   generateVerificationSubmittedEmail,
   generateAdminVerificationNotificationEmail,
+  generateClubVerificationSubmittedEmail,
+  generateAdminClubVerificationNotificationEmail,
 } = require("../utils/emailTemplates");
 
 const startAgeOver18VerifyUser = async (req, res) => {
@@ -27,18 +30,21 @@ const startAgeOver18VerifyUser = async (req, res) => {
         .json({ message: "ONEID_CLIENT_ID is not configured" });
     }
 
-    if (!process.env.BASE_URL) {
-      return res.status(500).json({ message: "BASE_URL is not configured" });
+    if (!process.env.FRONTEND_URL) {
+      return res
+        .status(500)
+        .json({ message: "FRONTEND_URL is not configured" });
     }
 
-    const state = `${uuidv4()}}`;
+    const state = `12345`;
 
     const url =
       `${process.env.ONEID_BASE_URL}/v2/authorize?` +
       new URLSearchParams({
         client_id: process.env.ONEID_CLIENT_ID,
-        redirect_uri: `${process.env.BASE_URL}/oauth-loading`,
+        redirect_uri: `${process.env.FRONTEND_URL}/#/oneid-loading`,
         response_type: "code",
+        state: state,
         scope: "openid age_over_18",
         acr_values: "eidas2:LoA Substantial",
       });
@@ -158,7 +164,6 @@ const userImageVerification = async (req, res) => {
       }
     } else if (type === "club") {
       // Assuming you have a Club model
-      const Club = require("../models/Club");
       entity = await Club.findById(userId);
       if (!entity) {
         return res.status(404).json({ message: "Club not found" });
@@ -169,20 +174,26 @@ const userImageVerification = async (req, res) => {
         .json({ message: "Invalid type. Must be 'user' or 'club'" });
     }
 
-    const fileName = `verification-images/${uuidv4()}-${file.originalname}`;
-    const params = {
-      Bucket: process.env.AWS_S3_BUCKET_NAME,
-      Key: fileName,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-    };
-    const uploadResult = await s3.upload(params).promise();
+    let uploadResult = null;
+    if (type === "user" && file) {
+      const fileName = `verification-images/${uuidv4()}-${file.originalname}`;
+      const params = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: fileName,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+      };
+      uploadResult = await s3.upload(params).promise();
+    }
 
     const verificationData = {
-      verificationImage: uploadResult.Location,
       status: "pending",
       type: type,
     };
+
+    if (uploadResult) {
+      verificationData.verificationImage = uploadResult.Location;
+    }
 
     // Set the appropriate ID field based on type
     if (type === "user") {
@@ -199,19 +210,33 @@ const userImageVerification = async (req, res) => {
       type === "user" ? entity.email : entity.contactEmail || entity.email;
     const name = type === "user" ? entity.username : entity.name;
 
-    const mailOptions = {
+    // Use appropriate email templates based on verification type
+    const userMailOptions = {
       to: email,
-      subject: "New Verification Submitted",
-      html: generateVerificationSubmittedEmail(name),
+      subject:
+        type === "user"
+          ? "New Verification Submitted"
+          : "New Club Verification Submitted",
+      html:
+        type === "user"
+          ? generateVerificationSubmittedEmail(name)
+          : generateClubVerificationSubmittedEmail(name),
       from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
+
     const adminMailOptions = {
       to: process.env.ADMIN_EMAIL,
-      subject: "New Verification Submitted",
-      html: generateAdminVerificationNotificationEmail(name, entity._id),
+      subject:
+        type === "user"
+          ? "New Verification Submitted"
+          : "New Club Verification Submitted",
+      html:
+        type === "user"
+          ? generateAdminVerificationNotificationEmail(name, entity._id)
+          : generateAdminClubVerificationNotificationEmail(name, entity._id),
       from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
-    await sendMail(mailOptions);
+    await sendMail(userMailOptions);
     await sendMail(adminMailOptions);
 
     return res
@@ -243,6 +268,14 @@ const clubVerification = async (req, res) => {
     ) {
       return res.status(400).json({ message: "All fields are required" });
     }
+    console.log("type", type);
+    const club = await Club.findById(clubId);
+    if (!club) {
+      return res.status(404).json({ message: "Club not found" });
+    }
+    if (club.isVerified === true) {
+      return res.status(400).json({ message: "Club is already verified" });
+    }
     const verificationData = {
       clubId,
       type,
@@ -251,9 +284,32 @@ const clubVerification = async (req, res) => {
       clubPhone,
       clubWebsite,
       businessLicense,
+      status: "pending",
     };
     const newVerification = new Verification(verificationData);
     await newVerification.save();
+
+    club.isVerified = "pending";
+    await club.save();
+
+    // Send email notifications
+    const userMailOptions = {
+      to: clubEmail,
+      subject: "New Club Verification Submitted",
+      html: generateClubVerificationSubmittedEmail(clubName),
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+    };
+
+    const adminMailOptions = {
+      to: process.env.ADMIN_EMAIL,
+      subject: "New Club Verification Submitted",
+      html: generateAdminClubVerificationNotificationEmail(clubName, clubId),
+      from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+    };
+
+    await sendMail(userMailOptions);
+    await sendMail(adminMailOptions);
+
     return res
       .status(200)
       .json({ message: "Verification submitted successfully", success: true });

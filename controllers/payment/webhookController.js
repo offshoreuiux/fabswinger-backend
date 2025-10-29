@@ -1,5 +1,12 @@
 const subscriptionSchema = require("../../models/payment/SubscriptionSchema");
 const User = require("../../models/user/UserSchema");
+const Affiliate = require("../../models/affiliate/AffiliateSchema");
+const Referral = require("../../models/affiliate/ReferralSchema");
+const Commission = require("../../models/affiliate/CommissionSchema");
+const { sendMail } = require("../../utils/transporter");
+const {
+  generateNewReferralCommissionEarnedEmail,
+} = require("../../utils/emailTemplates");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 const handleStripeWebhook = async (req, res) => {
@@ -123,6 +130,21 @@ const handleCheckoutSessionCompleted = async (session) => {
     throw new Error("Cannot determine subscription periods");
   }
 
+  // Determine referredBy from metadata referralCode or existing Referral record
+  let referredBy = null;
+  try {
+    const referralCode = session.metadata?.referralCode;
+    if (referralCode) {
+      const affiliate = await Affiliate.findOne({ referralCode }).select("_id");
+      if (affiliate) referredBy = affiliate._id;
+    } else {
+      const referral = await Referral.findOne({
+        referredUserId: userId,
+      }).select("affiliateId");
+      referredBy = referral?.affiliateId || null;
+    }
+  } catch {}
+
   // Create subscription record in database
   await subscriptionSchema.create({
     userId: userId,
@@ -147,6 +169,7 @@ const handleCheckoutSessionCompleted = async (session) => {
         calculated_period_end: currentPeriodEnd,
       },
     },
+    referredBy,
   });
   console.log("=== END SUBSCRIPTION DEBUG ===");
 
@@ -235,6 +258,52 @@ const handlePaymentSucceeded = async (invoice) => {
     subscription.status = "active";
     await subscription.save();
     console.log("Subscription activated after successful payment");
+
+    // Commission: 50% of the product price for the month, if referred
+    if (subscription.referredBy) {
+      const line = invoice.lines?.data?.[0];
+      const amount = line?.amount || invoice.amount_paid || 0; // minor units
+      const isMonthly =
+        (line?.price?.recurring?.interval ||
+          invoice.lines?.data?.[0]?.plan?.interval) === "month";
+      if (amount > 0 && isMonthly) {
+        const commissionAmount = Math.floor(amount / 2);
+        await Commission.create({
+          affiliateId: subscription.referredBy,
+          referredUserId: subscription.userId,
+          subscriptionId: subscription._id,
+          amount: commissionAmount,
+          status: "pending",
+        });
+
+        // Update affiliate aggregates
+        const affiliate = await Affiliate.findById(
+          subscription.referredBy
+        ).populate("userId", "email username");
+        if (affiliate) {
+          affiliate.totalEarnings =
+            (affiliate.totalEarnings || 0) + commissionAmount;
+          affiliate.totalReferrals = affiliate.totalReferrals || 0;
+          await affiliate.save();
+
+          // Notify affiliate
+          try {
+            const user = await User.findById(subscription.userId).select(
+              "username"
+            );
+            await sendMail({
+              to: affiliate.userId.email,
+              from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+              subject: "New Referral Commission Earned",
+              html: generateNewReferralCommissionEarnedEmail(
+                user?.username || "A user",
+                ""
+              ),
+            });
+          } catch {}
+        }
+      }
+    }
   }
 };
 

@@ -50,6 +50,11 @@ const SubscriptionSchema = new mongoose.Schema(
       default: null,
       required: false,
     },
+    referredBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Affiliate",
+      required: false,
+    },
   },
   { timestamps: true }
 );

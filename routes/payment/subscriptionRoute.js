@@ -5,6 +5,7 @@ const {
   getSubscriptionStatus,
   cancelSubscription,
   reactivateSubscription,
+  registerAffiliate,
 } = require("../../controllers/payment/subscriptionController");
 const { authenticateToken } = require("../../middleware");
 
@@ -23,5 +24,8 @@ router.post("/cancel", authenticateToken, cancelSubscription);
 
 // Reactivate subscription
 router.post("/reactivate", authenticateToken, reactivateSubscription);
+
+// Register as affiliate
+router.post("/affiliate/register", authenticateToken, registerAffiliate);
 
 module.exports = router;
