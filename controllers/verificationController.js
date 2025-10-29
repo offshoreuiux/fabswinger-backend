@@ -131,7 +131,6 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 const userImageVerification = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { type = "user" } = req.body; // Default to "user" if not specified
 
     if (!req.file) {
       return res
@@ -156,26 +155,13 @@ const userImageVerification = async (req, res) => {
     }
 
     // Verify the entity exists
-    let entity;
-    if (type === "user") {
-      entity = await User.findById(userId);
-      if (!entity) {
-        return res.status(404).json({ message: "User not found" });
-      }
-    } else if (type === "club") {
-      // Assuming you have a Club model
-      entity = await Club.findById(userId);
-      if (!entity) {
-        return res.status(404).json({ message: "Club not found" });
-      }
-    } else {
-      return res
-        .status(400)
-        .json({ message: "Invalid type. Must be 'user' or 'club'" });
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
 
     let uploadResult = null;
-    if (type === "user" && file) {
+    if (file) {
       const fileName = `verification-images/${uuidv4()}-${file.originalname}`;
       const params = {
         Bucket: process.env.AWS_S3_BUCKET_NAME,
@@ -188,52 +174,38 @@ const userImageVerification = async (req, res) => {
 
     const verificationData = {
       status: "pending",
-      type: type,
+      type: "user",
     };
 
     if (uploadResult) {
       verificationData.verificationImage = uploadResult.Location;
     }
 
-    // Set the appropriate ID field based on type
-    if (type === "user") {
-      verificationData.userId = userId;
-    } else {
-      verificationData.clubId = userId;
-    }
+    verificationData.userId = userId;
 
     const newVerification = new Verification(verificationData);
     await newVerification.save();
 
     // Send email notification
-    const email =
-      type === "user" ? entity.email : entity.contactEmail || entity.email;
-    const name = type === "user" ? entity.username : entity.name;
+    const email = user.email;
+    const name = user.username;
 
     // Use appropriate email templates based on verification type
     const userMailOptions = {
       to: email,
       subject:
-        type === "user"
-          ? "New Verification Submitted"
-          : "New Club Verification Submitted",
+        "New Verification Submitted",
       html:
-        type === "user"
-          ? generateVerificationSubmittedEmail(name)
-          : generateClubVerificationSubmittedEmail(name),
+        generateVerificationSubmittedEmail(name),
       from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
 
     const adminMailOptions = {
       to: process.env.ADMIN_EMAIL,
       subject:
-        type === "user"
-          ? "New Verification Submitted"
-          : "New Club Verification Submitted",
+        "New Verification Submitted",
       html:
-        type === "user"
-          ? generateAdminVerificationNotificationEmail(name, entity._id)
-          : generateAdminClubVerificationNotificationEmail(name, entity._id),
+        generateAdminVerificationNotificationEmail(name, userId),
       from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
     await sendMail(userMailOptions);
