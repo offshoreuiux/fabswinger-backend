@@ -75,6 +75,7 @@ const signup = async (req, res) => {
       keepSignedIn,
       geoLocation,
       recaptchaToken,
+      affiliateCode,
     } = req.body;
 
     // Verify reCAPTCHA token
@@ -111,6 +112,7 @@ const signup = async (req, res) => {
       password: hashedPassword,
       keepSignedIn: keepSignedIn || false,
       geoLocation,
+      affiliateOf: affiliateCode,
     });
     await newUser.save();
 

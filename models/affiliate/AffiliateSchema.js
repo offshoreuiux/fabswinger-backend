@@ -23,6 +23,10 @@ const affiliateSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    pendingPayout: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

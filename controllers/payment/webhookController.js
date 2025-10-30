@@ -281,6 +281,8 @@ const handlePaymentSucceeded = async (invoice) => {
           subscription.referredBy
         ).populate("userId", "email username");
         if (affiliate) {
+          affiliate.pendingPayout =
+            (affiliate.pendingPayout || 0) + commissionAmount;
           affiliate.totalEarnings =
             (affiliate.totalEarnings || 0) + commissionAmount;
           affiliate.totalReferrals = affiliate.totalReferrals || 0;
