@@ -162,9 +162,9 @@ const createCheckoutSession = async (req, res) => {
     });
 
     let isFreeLifeTime = false;
-    if (freeSubscriptionsCount < 500) {
-      isFreeLifeTime = true;
-    }
+    // if (freeSubscriptionsCount < 500) {
+    //   isFreeLifeTime = true;
+    // }
 
     console.log(
       "Free subscriptions count:",
@@ -352,11 +352,11 @@ const cancelSubscription = async (req, res) => {
       return res.status(404).json({ message: "No active subscription found" });
     }
 
-    if (subscription.isFreeLifeTime) {
-      return res.status(400).json({
-        message: "Cannot cancel free lifetime subscription",
-      });
-    }
+    // if (subscription.isFreeLifeTime) {
+    //   return res.status(400).json({
+    //     message: "Cannot cancel free lifetime subscription",
+    //   });
+    // }
 
     // Cancel Stripe subscription
     if (subscription.stripeSubscriptionId) {

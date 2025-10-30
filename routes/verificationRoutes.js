@@ -13,7 +13,7 @@ router.get("/start/:userId/:email", startAgeOver18VerifyUser);
 router.get("/callback", callbackAgeOver18VerifyUser);
 
 router.post(
-  "/user-image-verification/:userId",
+  "/user-image-verification",
   upload.single("verificationImage"),
   userImageVerification
 );
