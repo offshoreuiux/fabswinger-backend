@@ -4,6 +4,16 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema(
   {
     // Basic authentication info
+    stripeCustomerId: {
+      type: String,
+      default: null,
+      required: false,
+    },
+    stripeSubscriptionId: {
+      type: String,
+      default: null,
+      required: false,
+    },
     username: {
       type: String,
       required: true,

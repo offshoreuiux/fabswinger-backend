@@ -27,6 +27,8 @@ const forumRoutes = require("./routes/forumRoute");
 const countriesRoutes = require("./routes/countriesRoute");
 const adminRoutes = require("./routes/admin/adminRoute");
 const verificationRoutes = require("./routes/verificationRoutes");
+const subscriptionRoutes = require("./routes/payment/subscriptionRoute");
+const webhookRoutes = require("./routes/payment/webhookRoute");
 const NotificationService = require("./services/notificationService");
 const { generateDailyMatchesEmail } = require("./utils/emailTemplates");
 const transporter = require("./utils/transporter");
@@ -34,6 +36,10 @@ const transporter = require("./utils/transporter");
 const app = express();
 const server = http.createServer(app);
 app.use(cors()); // allow frontend to access
+
+// Stripe webhook endpoint needs raw body, so it must be before express.json()
+app.use("/api/webhooks", express.raw({ type: "application/json" }));
+
 app.use(express.json());
 
 require("dotenv").config();
@@ -68,6 +74,8 @@ app.use("/api/forum", forumRoutes);
 app.use("/api/countries", countriesRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/verification", verificationRoutes);
+app.use("/api/subscription", subscriptionRoutes);
+app.use("/api/webhooks", webhookRoutes);
 
 // Seed default admin user if missing
 (async () => {
