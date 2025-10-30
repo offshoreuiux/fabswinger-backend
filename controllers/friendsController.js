@@ -46,15 +46,15 @@ const getFriendList = async (req, res) => {
     }
 
     // Process the friend list to return the correct user info and status
-    const processedFriendList = friendList.map((friendship) => {
+    const processedFriendList = friendList?.map((friendship) => {
       // If I'm the sender, show the receiver; if I'm the receiver, show the sender
-      const isCurrentUserSender = friendship.sender._id.toString() === userId;
+      const isCurrentUserSender = friendship?.sender?._id.toString() === userId;
 
       return {
         ...(isCurrentUserSender
-          ? friendship.receiver.toObject()
-          : friendship.sender.toObject()),
-        status: friendship.status,
+          ? friendship?.receiver?.toObject() || {}
+          : friendship?.sender?.toObject() || {}),
+        status: friendship?.status,
         isMutualFriend: false, // For current user's friends, this is always false
       };
     });

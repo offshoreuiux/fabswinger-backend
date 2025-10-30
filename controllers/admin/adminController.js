@@ -3,6 +3,8 @@ const Verification = require("../../models/VerificationSchema");
 const {
   generateVerificationApprovedEmail,
   generateVerificationRejectedEmail,
+  generateClubVerificationApprovedEmail,
+  generateClubVerificationRejectedEmail,
 } = require("../../utils/emailTemplates");
 const { sendMail } = require("../../utils/transporter");
 
@@ -141,16 +143,25 @@ const verifyVerification = async (req, res) => {
 
     console.log("email", entity);
 
+    // Use appropriate email templates based on verification type
     const mailOptions = {
       to: email,
       subject:
         status === "verified"
-          ? "Verification Approved"
-          : "Verification Rejected",
+          ? entityType === "user"
+            ? "Verification Approved"
+            : "Club Verification Approved"
+          : entityType === "user"
+          ? "Verification Rejected"
+          : "Club Verification Rejected",
       html:
         status === "verified"
-          ? generateVerificationApprovedEmail(name)
-          : generateVerificationRejectedEmail(name),
+          ? entityType === "user"
+            ? generateVerificationApprovedEmail(name)
+            : generateClubVerificationApprovedEmail(name)
+          : entityType === "user"
+          ? generateVerificationRejectedEmail(name)
+          : generateClubVerificationRejectedEmail(name),
       from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
 

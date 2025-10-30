@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const { generatePasswordResetEmail } = require("../utils/emailTemplates");
 const { sendMail } = require("../utils/transporter");
 const Verification = require("../models/VerificationSchema");
+const Subscription = require("../models/payment/SubscriptionSchema");
 
 // Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
 const fetch = globalThis.fetch || require("node-fetch");
@@ -38,6 +39,7 @@ const verifyRecaptcha = async (recaptchaToken) => {
         body: `secret=${secretKey}&response=${recaptchaToken}`,
       }
     );
+    console.log("response", response);
 
     if (!response.ok) {
       console.error(
@@ -115,20 +117,20 @@ const signup = async (req, res) => {
     // console.log("newUser", newUser);
 
     // Generate token with different expiration based on keepSignedIn preference
-    // const tokenExpiration = keepSignedIn ? "30d" : "7d";
-    // const token = jwt.sign(
-    //   { userId: newUser._id, role: newUser.role },
-    //   process.env.JWT_SECRET,
-    //   {
-    //     expiresIn: tokenExpiration,
-    //   }
-    // );
+    const tokenExpiration = keepSignedIn ? "30d" : "7d";
+    const token = jwt.sign(
+      { userId: newUser._id, role: newUser.role },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: tokenExpiration,
+      }
+    );
 
     res.status(201).json({
       success: true,
       message: "Signup successful",
-      // token,
-      // keepSignedIn: newUser.keepSignedIn,
+      token,
+      keepSignedIn: newUser.keepSignedIn,
       user: {
         id: newUser._id,
         username: newUser.username,
@@ -267,8 +269,9 @@ const login = async (req, res) => {
 
 const verifyToken = async (req, res) => {
   try {
+    const userId = req.user.userId;
     // The middleware has already verified the token and added user info to req.user
-    const user = await User.findById(req.user.userId).select("-password");
+    const user = await User.findById(userId).select("-password");
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -284,6 +287,8 @@ const verifyToken = async (req, res) => {
         error: "You are not verified yet, please wait for verification",
       });
     }
+
+    const subscription = await Subscription.findOne({ userId });
 
     res.status(200).json({
       user: {
