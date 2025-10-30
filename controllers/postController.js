@@ -39,11 +39,10 @@ const createPost = async (req, res) => {
     });
     console.log("Today's post count:", todayPostCount);
 
-    // ✅ Step 3: Check user's subscription
+    //Check user's subscription
     const subscription = await SubscriptionSchema.findOne({ userId });
     console.log("subscription?.status:", subscription?.status);
 
-    // ✅ Step 4: Enforce limits
     if (
       (!subscription && todayPostCount >= 1) ||
       (subscription?.status !== "active" && todayPostCount >= 1) ||
@@ -55,6 +54,26 @@ const createPost = async (req, res) => {
           subscription?.status === "active"
             ? "Daily post limit (10) reached. Try again tomorrow."
             : "Daily post limit (1) reached. Upgrade your plan to post more.",
+      });
+    }
+
+    //Total media upload limit (all time)
+    const totalMediaCount = await Post.countDocuments({
+      userId,
+      images: { $exists: true, $ne: [] },
+    });
+
+    if (
+      (!subscription && totalMediaCount >= 5) ||
+      (subscription?.status !== "active" && totalMediaCount >= 5) ||
+      (subscription?.status === "active" && totalMediaCount >= 100)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          subscription?.status === "active"
+            ? "Total upload limit (100) reached. Delete old posts to upload more."
+            : "Total upload limit (5) reached. Upgrade your plan to upload more.",
       });
     }
 

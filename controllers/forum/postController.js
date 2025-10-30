@@ -42,7 +42,7 @@ const createPost = async (req, res) => {
     (!subscription && count >= 1) ||
     (subscription?.status !== "active" && count >= 1) ||
     (subscription?.status === "active" && count >= 10)
-  ){
+  ) {
     return res.status(403).json({
       success: false,
       message:

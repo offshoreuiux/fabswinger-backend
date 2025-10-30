@@ -1,6 +1,7 @@
 const Meet = require("../../models/meet/MeetSchema");
 const MeetHotlist = require("../../models/hotlist/MeetHotlistSchema");
 const MeetParticipant = require("../../models/meet/MeetParticipantSchema");
+const SubscriptionSchema = require("../../models/payment/SubscriptionSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");
 const { s3 } = require("../../utils/s3");
@@ -24,6 +25,45 @@ const createMeet = async (req, res) => {
       rsvpEveryone,
       joinRequest,
     } = req.body;
+
+    //Check user subscription status
+    const subscription = await SubscriptionSchema.findOne({ userId });
+    console.log("subscription?.status:", subscription?.status);
+
+    //Fetch all meets by this user
+    const userMeets = await Meet.find({ userId });
+    const now = new Date();
+
+    // Filter active (upcoming) meets
+     const activeMeets = userMeets.filter((meet) => {
+      const meetDateTime = new Date(meet.date);
+      if (meet.time) {
+        const [hours, minutes] = meet.time.split(":").map(Number);
+        meetDateTime.setHours(hours || 0, minutes || 0, 0, 0);
+      }
+      return meetDateTime >= now; // still upcoming
+    });
+
+    const activeCount = activeMeets.length;
+
+    //Apply meet creation limits
+    if (!subscription || subscription.status !== "active") {
+      // Non-subscribed user → only 1 active meet
+      if (activeCount >= 1) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "You can create only one meet at a time. Wait until your current meet date has passed.",
+        });
+      }
+    } else if (subscription.status === "active" && activeCount >= 10) {
+      // Subscribed user → up to 10 active meets
+      return res.status(403).json({
+        success: false,
+        message:
+          "You have reached your limit of 10 active meets. You can create new ones once existing meets are completed.",
+      });
+    }
 
     // Handle people array from FormData
     let people = req.body.people;
