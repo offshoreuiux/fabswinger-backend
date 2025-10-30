@@ -6,8 +6,8 @@ const Commission = require("../../models/affiliate/CommissionSchema");
 const { sendMail } = require("../../utils/transporter");
 const {
   generateAffiliateRegistrationEmail,
-  generateNewReferralCommissionEarnedEmail,
   generateAffiliateCommissionPayoutEmail,
+  generateAffiliateSubscriptionCommissionEmail,
 } = require("../../utils/emailTemplates");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
@@ -157,9 +157,9 @@ const createCheckoutSession = async (req, res) => {
     });
 
     let isFreeLifeTime = false;
-    // if (freeSubscriptionsCount < 500) {
-    //   isFreeLifeTime = true;
-    // }
+    if (freeSubscriptionsCount < 500) {
+      isFreeLifeTime = true;
+    }
 
     console.log(
       "Free subscriptions count:",
@@ -204,17 +204,8 @@ const createCheckoutSession = async (req, res) => {
 
         affiliate.totalReferrals++;
         affiliate.totalEarnings = (affiliate.totalEarnings || 0) + commission;
+        affiliate.pendingPayout = (affiliate.pendingPayout || 0) + commission;
         await affiliate.save();
-
-        await sendMail({
-          from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
-          to: affiliate.userId.email,
-          subject: "New Referral Commission Earned",
-          html: generateNewReferralCommissionEarnedEmail(
-            user.username,
-            user.affiliateOf
-          ),
-        });
       }
 
       return res.status(200).json({
@@ -346,11 +337,11 @@ const cancelSubscription = async (req, res) => {
       return res.status(404).json({ message: "No active subscription found" });
     }
 
-    // if (subscription.isFreeLifeTime) {
-    //   return res.status(400).json({
-    //     message: "Cannot cancel free lifetime subscription",
-    //   });
-    // }
+    if (subscription.isFreeLifeTime) {
+      return res.status(400).json({
+        message: "Cannot cancel free lifetime subscription",
+      });
+    }
 
     // Cancel Stripe subscription
     if (subscription.stripeSubscriptionId) {
@@ -442,9 +433,11 @@ const payoutAffiliate = async (req, res) => {
     }
 
     const pendingCommissions = await Commission.find({
-      affiliateId: userId,
+      affiliateId: affiliate._id,
       status: "pending",
     });
+
+    console.log("pendingCommissions", pendingCommissions);
 
     const totalAmount = pendingCommissions.reduce(
       (acc, commission) => acc + commission.amount,
@@ -489,7 +482,7 @@ const payoutAffiliate = async (req, res) => {
       message: "Payout processed",
       success: true,
       payout,
-      amount: totalAmount,
+      amount: totalAmount / 100, // Convert pence to pounds for frontend
     });
   } catch (error) {
     console.error("Payout error:", error);
@@ -532,12 +525,12 @@ const getAffiliateFunds = async (req, res) => {
     res.json({
       _id: affiliate._id,
       refCode: affiliate.referralCode, // Align with frontend
-      totalEarnings: affiliate.totalEarnings || 0,
-      pendingPayout: affiliate.pendingPayout || 0,
+      totalEarnings: (affiliate.totalEarnings || 0) / 100, // Convert pence to pounds
+      pendingPayout: (affiliate.pendingPayout || 0) / 100, // Convert pence to pounds
       stripeBalance,
       transactions: transactions.map((t) => ({
         _id: t._id,
-        amount: t.amount,
+        amount: t.amount / 100, // Convert pence to pounds
         status: t.status,
         date: t.createdAt,
       })),

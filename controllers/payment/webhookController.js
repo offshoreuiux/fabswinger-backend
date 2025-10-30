@@ -5,7 +5,7 @@ const Referral = require("../../models/affiliate/ReferralSchema");
 const Commission = require("../../models/affiliate/CommissionSchema");
 const { sendMail } = require("../../utils/transporter");
 const {
-  generateNewReferralCommissionEarnedEmail,
+  generateAffiliateSubscriptionCommissionEmail,
 } = require("../../utils/emailTemplates");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
@@ -260,50 +260,72 @@ const handlePaymentSucceeded = async (invoice) => {
     console.log("Subscription activated after successful payment");
 
     // Commission: 50% of the product price for the month, if referred
+    // Only create commission on FIRST payment, not on renewals
     if (subscription.referredBy) {
-      const line = invoice.lines?.data?.[0];
-      const amount = line?.amount || invoice.amount_paid || 0; // minor units
-      const isMonthly =
-        (line?.price?.recurring?.interval ||
-          invoice.lines?.data?.[0]?.plan?.interval) === "month";
-      if (amount > 0 && isMonthly) {
-        const commissionAmount = Math.floor(amount / 2);
-        await Commission.create({
-          affiliateId: subscription.referredBy,
-          referredUserId: subscription.userId,
-          subscriptionId: subscription._id,
-          amount: commissionAmount,
-          status: "pending",
-        });
+      // Check if commission already exists for this subscription
+      const existingCommission = await Commission.findOne({
+        subscriptionId: subscription._id,
+        affiliateId: subscription.referredBy,
+      });
 
-        // Update affiliate aggregates
-        const affiliate = await Affiliate.findById(
-          subscription.referredBy
-        ).populate("userId", "email username");
-        if (affiliate) {
-          affiliate.pendingPayout =
-            (affiliate.pendingPayout || 0) + commissionAmount;
-          affiliate.totalEarnings =
-            (affiliate.totalEarnings || 0) + commissionAmount;
-          affiliate.totalReferrals = affiliate.totalReferrals || 0;
-          await affiliate.save();
+      // Only create commission if it doesn't exist yet (first payment)
+      if (!existingCommission) {
+        const line = invoice.lines?.data?.[0];
+        const amount = line?.amount || invoice.amount_paid || 0; // minor units
+        const isMonthly =
+          (line?.price?.recurring?.interval ||
+            invoice.lines?.data?.[0]?.plan?.interval) === "month";
+        if (amount > 0 && isMonthly) {
+          const commissionAmount = Math.floor(amount / 2);
+          await Commission.create({
+            affiliateId: subscription.referredBy,
+            referredUserId: subscription.userId,
+            subscriptionId: subscription._id,
+            amount: commissionAmount,
+            status: "pending",
+          });
 
-          // Notify affiliate
-          try {
-            const user = await User.findById(subscription.userId).select(
-              "username"
-            );
-            await sendMail({
-              to: affiliate.userId.email,
-              from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
-              subject: "New Referral Commission Earned",
-              html: generateNewReferralCommissionEarnedEmail(
-                user?.username || "A user",
-                ""
-              ),
-            });
-          } catch {}
+          // Update affiliate aggregates
+          const affiliate = await Affiliate.findById(
+            subscription.referredBy
+          ).populate("userId", "email username");
+          if (affiliate) {
+            affiliate.pendingPayout =
+              (affiliate.pendingPayout || 0) + commissionAmount;
+            affiliate.totalEarnings =
+              (affiliate.totalEarnings || 0) + commissionAmount;
+            affiliate.totalReferrals = affiliate.totalReferrals || 0;
+            await affiliate.save();
+
+            // Notify affiliate about commission earned (ONLY on first payment)
+            try {
+              const user = await User.findById(subscription.userId).select(
+                "username"
+              );
+              // Convert commission amount from pence to pounds for display
+              const commissionInPounds = (commissionAmount / 100).toFixed(2);
+              await sendMail({
+                to: affiliate.userId.email,
+                from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+                subject: "🎉 Commission Earned - Your Referral Subscribed!",
+                html: generateAffiliateSubscriptionCommissionEmail(
+                  affiliate.userId.username,
+                  user?.username || "A user",
+                  commissionInPounds
+                ),
+              });
+              console.log(
+                `Commission email sent to ${affiliate.userId.email} for first payment`
+              );
+            } catch (emailError) {
+              console.error("Error sending commission email:", emailError);
+            }
+          }
         }
+      } else {
+        console.log(
+          `Commission already exists for subscription ${subscription._id}, skipping duplicate`
+        );
       }
     }
   }
