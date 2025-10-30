@@ -1,9 +1,15 @@
 const User = require("../models/user/UserSchema");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
-const { generatePasswordResetEmail } = require("../utils/emailTemplates");
+const {
+  generatePasswordResetEmail,
+  generateAffiliateNewSignupEmail,
+  generateReferredUserWelcomeEmail,
+} = require("../utils/emailTemplates");
 const { sendMail } = require("../utils/transporter");
 const Verification = require("../models/VerificationSchema");
+const Subscription = require("../models/payment/SubscriptionSchema");
+const Affiliate = require("../models/affiliate/AffiliateSchema");
 
 // Import fetch - use global fetch for Node.js 18+ or node-fetch for older versions
 const fetch = globalThis.fetch || require("node-fetch");
@@ -38,6 +44,7 @@ const verifyRecaptcha = async (recaptchaToken) => {
         body: `secret=${secretKey}&response=${recaptchaToken}`,
       }
     );
+    console.log("response", response);
 
     if (!response.ok) {
       console.error(
@@ -73,7 +80,10 @@ const signup = async (req, res) => {
       keepSignedIn,
       geoLocation,
       recaptchaToken,
+      affiliateCode,
     } = req.body;
+
+    console.log("affiliateCode", affiliateCode);
 
     // Verify reCAPTCHA token
     if (recaptchaToken) {
@@ -109,26 +119,68 @@ const signup = async (req, res) => {
       password: hashedPassword,
       keepSignedIn: keepSignedIn || false,
       geoLocation,
+      affiliateOf: affiliateCode,
     });
     await newUser.save();
 
     // console.log("newUser", newUser);
 
+    // Handle affiliate emails if user signed up with referral code
+    if (affiliateCode) {
+      try {
+        const affiliate = await Affiliate.findOne({
+          referralCode: affiliateCode,
+        }).populate("userId", "username email");
+
+        if (affiliate && affiliate.userId) {
+          // Send email to affiliate about new signup
+          await sendMail({
+            to: affiliate.userId.email,
+            from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+            subject: "New User Signed Up Using Your Referral Code!",
+            html: generateAffiliateNewSignupEmail(
+              affiliate.userId.username,
+              newUser.username,
+              affiliateCode
+            ),
+          });
+
+          // Send welcome email to new user mentioning who referred them
+          await sendMail({
+            to: newUser.email,
+            from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+            subject: "Welcome to VerifiedSwingers!",
+            html: generateReferredUserWelcomeEmail(
+              newUser.username,
+              affiliate.userId.username
+            ),
+          });
+
+          console.log(
+            `Affiliate emails sent for referral: ${affiliateCode} by ${affiliate.userId.username}`
+          );
+        }
+      } catch (emailError) {
+        // Don't fail signup if emails fail
+        console.error("Error sending affiliate emails:", emailError);
+      }
+    }
+
     // Generate token with different expiration based on keepSignedIn preference
-    // const tokenExpiration = keepSignedIn ? "30d" : "7d";
-    // const token = jwt.sign(
-    //   { userId: newUser._id, role: newUser.role },
-    //   process.env.JWT_SECRET,
-    //   {
-    //     expiresIn: tokenExpiration,
-    //   }
-    // );
+    const tokenExpiration = keepSignedIn ? "30d" : "7d";
+    const token = jwt.sign(
+      { userId: newUser._id, role: newUser.role },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: tokenExpiration,
+      }
+    );
 
     res.status(201).json({
       success: true,
       message: "Signup successful",
-      // token,
-      // keepSignedIn: newUser.keepSignedIn,
+      token,
+      keepSignedIn: newUser.keepSignedIn,
       user: {
         id: newUser._id,
         username: newUser.username,
@@ -267,8 +319,9 @@ const login = async (req, res) => {
 
 const verifyToken = async (req, res) => {
   try {
+    const userId = req.user.userId;
     // The middleware has already verified the token and added user info to req.user
-    const user = await User.findById(req.user.userId).select("-password");
+    const user = await User.findById(userId).select("-password");
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -284,6 +337,8 @@ const verifyToken = async (req, res) => {
         error: "You are not verified yet, please wait for verification",
       });
     }
+
+    const subscription = await Subscription.findOne({ userId });
 
     res.status(200).json({
       user: {

@@ -130,7 +130,24 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
 const userImageVerification = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId = "", email = "" } = req.body;
+
+    console.log("userId", userId, email);
+
+    let user;
+    if (userId) {
+      user = await User.findById(userId);
+    } else {
+      user = await User.findOne({ email });
+    }
+
+    if (!user) {
+      user = await User.findOne({ username: email });
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
     if (!req.file) {
       return res
@@ -141,10 +158,8 @@ const userImageVerification = async (req, res) => {
 
     // Check for existing pending verification
     const existingVerification = await Verification.findOne({
-      $or: [
-        { userId: userId, type: "user" },
-        { clubId: userId, type: "club" },
-      ],
+      userId: user?._id,
+      type: "user",
       status: "pending",
     });
 
@@ -155,10 +170,6 @@ const userImageVerification = async (req, res) => {
     }
 
     // Verify the entity exists
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
 
     let uploadResult = null;
     if (file) {
@@ -181,31 +192,28 @@ const userImageVerification = async (req, res) => {
       verificationData.verificationImage = uploadResult.Location;
     }
 
-    verificationData.userId = userId;
+    verificationData.userId = user?._id;
+    console.log("verificationData", verificationData);
 
     const newVerification = new Verification(verificationData);
     await newVerification.save();
 
     // Send email notification
-    const email = user.email;
+    const mailEmail = user.email;
     const name = user.username;
 
     // Use appropriate email templates based on verification type
     const userMailOptions = {
-      to: email,
-      subject:
-        "New Verification Submitted",
-      html:
-        generateVerificationSubmittedEmail(name),
+      to: mailEmail,
+      subject: "New Verification Submitted",
+      html: generateVerificationSubmittedEmail(name),
       from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
 
     const adminMailOptions = {
       to: process.env.ADMIN_EMAIL,
-      subject:
-        "New Verification Submitted",
-      html:
-        generateAdminVerificationNotificationEmail(name, userId),
+      subject: "New Verification Submitted",
+      html: generateAdminVerificationNotificationEmail(name, user?._id),
       from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
     };
     await sendMail(userMailOptions);

@@ -6,8 +6,8 @@ const Commission = require("../../models/affiliate/CommissionSchema");
 const { sendMail } = require("../../utils/transporter");
 const {
   generateAffiliateRegistrationEmail,
-  generateNewReferralCommissionEarnedEmail,
   generateAffiliateCommissionPayoutEmail,
+  generateAffiliateSubscriptionCommissionEmail,
 } = require("../../utils/emailTemplates");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
@@ -36,40 +36,34 @@ const registerAffiliate = async (req, res) => {
   }
 
   let affiliate = await Affiliate.findOne({ userId });
-  // if (affiliate) {
-  //   return res.status(200).json({
-  //     message: "Affiliate already registered",
-  //     success: true,
-  //     affiliate: affiliate,
-  //   });
-  // }
+  if (affiliate) {
+    return res.status(200).json({
+      message: "Affiliate already registered",
+      success: true,
+      affiliate: affiliate,
+    });
+  }
 
-  // const stripeAccount = await stripe.accounts.create({
-  //   type: "express",
-  //   email: user.email,
-  // business_type: "individual",
-  //   capabilities: {
-  //     card_payments: {
-  //       requested: true,
-  //     },
-  //     transfers: {
-  //       requested: true,
-  //     },
-  //   },
-  // });
-  // console.log("stripeAccount", stripeAccount);
+  const stripeAccount = await stripe.accounts.create({
+    type: "express",
+    email: user.email,
+    capabilities: {
+      card_payments: {
+        requested: true,
+      },
+      transfers: {
+        requested: true,
+      },
+    },
+  });
+  console.log("stripeAccount", stripeAccount);
   const accountLink = await stripe.accountLinks.create({
-    account: "acct_1SNBx8DM4LvGaEMc",
+    account: stripeAccount?.id,
     refresh_url: `${process.env.FRONTEND_URL}/#/affiliate?status=pending`,
     return_url: `${process.env.FRONTEND_URL}/#/affiliate?status=success`,
     type: "account_onboarding",
   });
   console.log("accountLink", accountLink);
-  return res.status(200).json({
-    message: "Affiliate registration successful",
-    success: true,
-    accountLink: accountLink.url,
-  });
 
   user.stripeAccountId = stripeAccount.id;
   await user.save();
@@ -93,6 +87,7 @@ const registerAffiliate = async (req, res) => {
     message: "Affiliate registered successfully",
     success: true,
     affiliate: affiliate,
+    accountLink: accountLink.url,
   });
 };
 
@@ -129,7 +124,7 @@ const trackReferral = async (req, res) => {
 const createCheckoutSession = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { priceId, referralCode } = req.body;
+    const { priceId } = req.body;
 
     console.log(
       "Creating checkout session for user:",
@@ -175,11 +170,10 @@ const createCheckoutSession = async (req, res) => {
 
     if (isFreeLifeTime) {
       let affiliate = null;
-      if (referralCode) {
-        affiliate = await Affiliate.findOne({ referralCode }).populate(
-          "userId",
-          "email"
-        );
+      if (user.affiliateOf) {
+        affiliate = await Affiliate.findOne({
+          referralCode: user.affiliateOf,
+        }).populate("userId", "email");
         if (!affiliate) {
           return res.status(404).json({ message: "Invalid referral code" });
         }
@@ -210,17 +204,8 @@ const createCheckoutSession = async (req, res) => {
 
         affiliate.totalReferrals++;
         affiliate.totalEarnings = (affiliate.totalEarnings || 0) + commission;
+        affiliate.pendingPayout = (affiliate.pendingPayout || 0) + commission;
         await affiliate.save();
-
-        await sendMail({
-          from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
-          to: affiliate.userId.email,
-          subject: "New Referral Commission Earned",
-          html: generateNewReferralCommissionEarnedEmail(
-            user.username,
-            referralCode
-          ),
-        });
       }
 
       return res.status(200).json({
@@ -255,8 +240,8 @@ const createCheckoutSession = async (req, res) => {
       }
 
       let affiliate = null;
-      if (referralCode) {
-        affiliate = await Affiliate.findOne({ referralCode });
+      if (user.affiliateOf) {
+        affiliate = await Affiliate.findOne({ referralCode: user.affiliateOf });
         if (!affiliate) {
           return res.status(400).json({ message: "Invalid referral code" });
         }
@@ -288,7 +273,7 @@ const createCheckoutSession = async (req, res) => {
         cancel_url: `${process.env.FRONTEND_URL}/#/subscriptions?canceled=true`,
         metadata: {
           userId: user._id.toString(),
-          ...(referralCode ? { referralCode } : {}),
+          ...(user.affiliateOf ? { referralCode: user.affiliateOf } : {}),
         },
       });
 
@@ -423,9 +408,9 @@ const reactivateSubscription = async (req, res) => {
 
 const payoutAffiliate = async (req, res) => {
   try {
-    const { affiliateId } = req.body;
+    const userId = req.user.userId;
 
-    const affiliate = await Affiliate.findById(affiliateId).populate(
+    const affiliate = await Affiliate.findOne({ userId }).populate(
       "userId",
       "username email"
     );
@@ -435,10 +420,24 @@ const payoutAffiliate = async (req, res) => {
         .json({ message: "Affiliate not found or no stripe account" });
     }
 
+    const stripeAccount = await stripe.accounts.retrieve(
+      affiliate.stripeAccountId
+    );
+    if (
+      !stripeAccount.requirements.currently_due.length &&
+      !stripeAccount.requirements.eventually_due.length
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Stripe account not fully verified" });
+    }
+
     const pendingCommissions = await Commission.find({
-      affiliateId,
+      affiliateId: affiliate._id,
       status: "pending",
     });
+
+    console.log("pendingCommissions", pendingCommissions);
 
     const totalAmount = pendingCommissions.reduce(
       (acc, commission) => acc + commission.amount,
@@ -461,9 +460,12 @@ const payoutAffiliate = async (req, res) => {
     });
 
     await Commission.updateMany(
-      { affiliateId, status: "pending" },
+      { affiliateId: affiliate._id, status: "pending" },
       { $set: { status: "paid" } }
     );
+
+    affiliate.pendingPayout = 0;
+    await affiliate.save();
 
     const affiliateUser = await User.findById(affiliate.userId);
     await sendMail({
@@ -480,13 +482,64 @@ const payoutAffiliate = async (req, res) => {
       message: "Payout processed",
       success: true,
       payout,
-      amount: totalAmount,
+      amount: totalAmount / 100, // Convert pence to pounds for frontend
     });
   } catch (error) {
     console.error("Payout error:", error);
     return res
       .status(500)
       .json({ message: "Payout failed", error: error.message });
+  }
+};
+
+const getAffiliateFunds = async (req, res) => {
+  const userId = req.user.userId;
+  const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+  try {
+    const affiliate = await Affiliate.findOne({ userId }).lean();
+    if (!affiliate) {
+      return res.status(404).json({ message: "Not an affiliate" });
+    }
+
+    let stripeBalance = { available: 0, pending: 0 };
+    if (affiliate.stripeAccountId) {
+      const balance = await stripe.balance.retrieve({
+        stripeAccount: affiliate.stripeAccountId,
+      });
+      stripeBalance = {
+        available:
+          (balance.available.find((b) => b.currency === "gbp")?.amount || 0) /
+          100,
+        pending:
+          (balance.pending.find((b) => b.currency === "gbp")?.amount || 0) /
+          100,
+      };
+    }
+
+    const transactions = await Commission.find({ affiliateId: affiliate._id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    res.json({
+      _id: affiliate._id,
+      refCode: affiliate.referralCode, // Align with frontend
+      totalEarnings: (affiliate.totalEarnings || 0) / 100, // Convert pence to pounds
+      pendingPayout: (affiliate.pendingPayout || 0) / 100, // Convert pence to pounds
+      stripeBalance,
+      transactions: transactions.map((t) => ({
+        _id: t._id,
+        amount: t.amount / 100, // Convert pence to pounds
+        status: t.status,
+        date: t.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error("getAffiliateFunds error:", error);
+    return res
+      .status(500)
+      .json({ message: "Internal server error", error: error.message });
   }
 };
 
@@ -498,4 +551,5 @@ module.exports = {
   cancelSubscription,
   reactivateSubscription,
   payoutAffiliate,
+  getAffiliateFunds,
 };

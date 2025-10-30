@@ -16,6 +16,7 @@ const NotificationService = require("../services/notificationService");
 let pendingMissedEmailTimers = new Map(); // key: `${chatId}:${userId}` -> Timeout
 const { sendMail } = require("./transporter");
 const { generatePrivateMessageEmail } = require("./emailTemplates");
+const SubscriptionSchema = require("../models/payment/SubscriptionSchema");
 
 let io;
 let onlineUsers = new Map(); // In-memory tracking for better performance
@@ -174,6 +175,41 @@ function initSocket(server) {
           }
         }
 
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0); // today 00:00
+
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999); // today 23:59
+
+        const count = await Message.countDocuments({
+          sender: senderId,
+          createdAt: { $gte: startOfDay, $lte: endOfDay },
+        });
+        console.log("count", count);
+
+        const subscription = await SubscriptionSchema.findOne({
+          userId: senderId,
+        });
+        console.log("subscription?.status", subscription?.status);
+
+        if (
+          !subscription ||
+          (subscription?.status !== "active" && count >= 10)
+        ) {
+          console.error(
+            "Daily message limit reached. Upgrade your plan to send more."
+          );
+          socket.emit("message-error", {
+            message:
+              "Daily message limit reached. Upgrade your plan to send more.",
+            details:
+              process.env.NODE_ENV === "development"
+                ? "Daily message limit reached. Upgrade your plan to send more."
+                : undefined,
+          });
+          return;
+        }
+
         // Create the message
         const messageData = {
           chatId: finalChatId,
@@ -322,7 +358,10 @@ function initSocket(server) {
       } catch (error) {
         console.error("Error sending message via socket:", error);
         socket.emit("message-error", {
-          message: "Internal server error while sending message",
+          message:
+            error?.message ||
+            error ||
+            "Internal server error while sending message",
           details:
             process.env.NODE_ENV === "development" ? error.message : undefined,
         });

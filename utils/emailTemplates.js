@@ -1319,6 +1319,257 @@ const generateAdminClubVerificationNotificationEmail = (clubName, clubId) => {
   `;
 };
 
+/**
+ * Generate email to affiliate when referred user subscribes and they earn commission
+ * @param {string} affiliateUsername - The affiliate's username
+ * @param {string} referredUsername - The referred user who subscribed
+ * @param {string} commissionAmount - The commission amount earned (in pounds, e.g., "5.00")
+ */
+const generateAffiliateSubscriptionCommissionEmail = (
+  affiliateUsername,
+  referredUsername,
+  commissionAmount
+) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Commission Earned - User Subscribed!</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f4f4f4; margin:0; padding:0; color:#111827; }
+        .container { max-width:600px; margin:24px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; padding:32px 24px; text-align:center; }
+        .content { padding:24px; }
+        .money-highlight { background:linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border:2px solid #10b981; border-radius:12px; padding:24px; text-align:center; margin:20px 0; }
+        .amount { font-size:48px; font-weight:800; color:#059669; margin:12px 0; }
+        .info-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:16px; margin-top:16px; }
+        .user-badge { display:inline-block; background:#10b981; color:#fff; padding:6px 12px; border-radius:9999px; font-size:14px; font-weight:600; }
+        .cta { display:inline-block; margin-top:20px; background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; text-decoration:none; padding:12px 24px; border-radius:9999px; font-weight:600; box-shadow:0 4px 12px rgba(16,185,129,0.3); }
+        .footer { padding:16px 24px; text-align:center; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb; background:#f9fafb; }
+        .icon { font-size: 64px; margin-bottom: 12px; }
+        .celebration { animation: bounce 1s ease-in-out; }
+        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="icon celebration">🎉💰</div>
+          <h1 style="margin:0; font-size:28px;">You Earned a Commission!</h1>
+        </div>
+        <div class="content">
+          <p style="font-size:16px;">Hi ${affiliateUsername},</p>
+          <p style="font-size:16px;">Exciting news! Your referred user just subscribed to a premium plan.</p>
+          
+          <div class="money-highlight">
+            <div style="color:#065f46; font-size:16px; font-weight:600; margin-bottom:8px;">
+              💸 Commission Earned
+            </div>
+            <div class="amount">£${commissionAmount}</div>
+            <div style="color:#059669; font-size:14px; margin-top:8px;">
+              Added to your pending balance
+            </div>
+          </div>
+
+          <div class="info-card">
+            <div style="margin-bottom:12px;">
+              <span style="color:#6b7280; font-size:14px;">Referred User:</span><br/>
+              <span class="user-badge">${referredUsername}</span>
+            </div>
+            <div style="color:#374151; font-size:14px; margin-top:8px;">
+              ✅ Subscription Confirmed<br/>
+              💳 Commission Status: <strong style="color:#10b981;">Pending</strong>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <div style="font-weight:600; margin-bottom:8px; color:#111827;">📊 Your Earnings</div>
+            <p style="margin:0; color:#374151; font-size:14px;">
+              This commission has been added to your pending balance. Once your total pending balance reaches £10, you can withdraw it to your bank account.
+            </p>
+          </div>
+
+          <div class="info-card" style="background:#fef3c7; border-color:#fbbf24;">
+            <div style="font-weight:600; margin-bottom:8px; color:#92400e;">🚀 Keep Growing</div>
+            <p style="margin:0; color:#92400e; font-size:14px;">
+              Share your referral link with more people and earn £5 for each subscription. The more you share, the more you earn!
+            </p>
+          </div>
+
+          <div style="text-align:center;">
+            <a class="cta" href="${
+              process.env.FRONTEND_URL
+            }/#/affiliate">View Your Dashboard</a>
+          </div>
+        </div>
+        <div class="footer">
+          <p style="margin:4px 0;">Keep up the great work! 🌟</p>
+          <p style="margin:4px 0;">© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate email to affiliate when someone signs up using their referral code
+ * @param {string} affiliateUsername - The affiliate's username
+ * @param {string} newUserUsername - The new user who signed up
+ * @param {string} referralCode - The referral code used
+ */
+const generateAffiliateNewSignupEmail = (
+  affiliateUsername,
+  newUserUsername,
+  referralCode
+) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>New User Signed Up Using Your Referral Code</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f4f4f4; margin:0; padding:0; color:#111827; }
+        .container { max-width:600px; margin:24px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color:#fff; padding:24px; text-align:center; }
+        .content { padding:24px; }
+        .highlight { background:#dbeafe; border:1px solid #93c5fd; border-radius:10px; padding:16px; margin:16px 0; }
+        .info-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:16px; margin-top:16px; }
+        .cta { display:inline-block; margin-top:16px; background:linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color:#fff; text-decoration:none; padding:10px 18px; border-radius:9999px; font-weight:600; }
+        .footer { padding:16px 24px; text-align:center; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb; background:#f9fafb; }
+        .icon { font-size: 48px; margin-bottom: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="icon">👤</div>
+          <h1>New Referral Signup!</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${affiliateUsername},</p>
+          <p>Great news! A new user has signed up using your referral code.</p>
+          
+          <div class="highlight">
+            <div style="font-weight:700; font-size:18px; color:#1d4ed8; margin-bottom:8px;">
+              ${newUserUsername}
+            </div>
+            <div style="color:#374151; font-size:14px;">
+              Just joined using code: <span style="font-weight:600;">${referralCode}</span>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <div style="font-weight:600; margin-bottom:8px; color:#111827;">💰 Earning Potential</div>
+            <p style="margin:0; color:#374151; font-size:14px;">
+              You'll earn <strong>£5.00</strong> when ${newUserUsername} subscribes to a premium plan!
+            </p>
+          </div>
+
+          <div class="info-card">
+            <div style="font-weight:600; margin-bottom:8px; color:#111827;">📊 Track Your Progress</div>
+            <p style="margin:0; color:#374151; font-size:14px;">
+              Check your affiliate dashboard to see all your referrals and earnings in real-time.
+            </p>
+          </div>
+
+          <a class="cta" href="${
+            process.env.FRONTEND_URL
+          }/#/affiliate">View Dashboard</a>
+        </div>
+        <div class="footer">
+          <p>Keep sharing your referral link to earn more!</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+/**
+ * Generate welcome email for referred user
+ * @param {string} username - The new user's username
+ * @param {string} referrerUsername - The username of the person who referred them (optional)
+ */
+const generateReferredUserWelcomeEmail = (username, referrerUsername) => {
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Welcome to VerifiedSwingers</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f4f4f4; margin:0; padding:0; color:#111827; }
+        .container { max-width:600px; margin:24px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 6px 18px rgba(0,0,0,0.08); }
+        .header { background:linear-gradient(135deg, #eacd48 0%, #fbbf24 100%); color:#111827; padding:24px; text-align:center; }
+        .content { padding:24px; }
+        .highlight { background:#fef3c7; border:1px solid #fde68a; border-radius:10px; padding:16px; margin:16px 0; text-align:center; }
+        .card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:16px; margin-top:16px; }
+        .cta { display:inline-block; margin-top:16px; background:linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color:#fff; text-decoration:none; padding:12px 24px; border-radius:9999px; font-weight:600; }
+        .footer { padding:16px 24px; text-align:center; font-size:12px; color:#6b7280; border-top:1px solid #e5e7eb; background:#f9fafb; }
+        .icon { font-size: 56px; margin-bottom: 12px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="icon">🎉</div>
+          <h1>Welcome to VerifiedSwingers!</h1>
+        </div>
+        <div class="content">
+          <p>Hi ${username},</p>
+          ${
+            referrerUsername
+              ? `<div class="highlight">
+            <div style="font-size:16px; font-weight:600; margin-bottom:8px;">
+              You were referred by ${referrerUsername}
+            </div>
+            <div style="font-size:14px; color:#92400e;">
+              Thanks for joining through their recommendation!
+            </div>
+          </div>`
+              : ""
+          }
+          
+          <p>Welcome to our community! We're excited to have you here.</p>
+
+          <div class="card">
+            <div style="font-weight:600; margin-bottom:8px; color:#111827;">✨ Get Started</div>
+            <ul style="margin:8px 0; padding-left:20px; color:#374151; font-size:14px;">
+              <li>Complete your profile to connect with others</li>
+              <li>Browse verified members in your area</li>
+              <li>Join events and meets near you</li>
+              <li>Engage with the community</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:600; margin-bottom:8px; color:#111827;">🌟 Upgrade to Premium</div>
+            <p style="margin:0; color:#374151; font-size:14px;">
+              Unlock unlimited messaging, see who viewed your profile, and access exclusive features with a Gold Supporter subscription.
+            </p>
+          </div>
+
+          <a class="cta" href="${
+            process.env.FRONTEND_URL
+          }/#/dashboard">Start Exploring</a>
+        </div>
+        <div class="footer">
+          <p>Need help? Contact our support team anytime.</p>
+          <p>© ${new Date().getFullYear()} VerifiedSwingers. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
 module.exports = {
   generatePasswordResetEmail,
   generateWelcomeEmail,
@@ -1338,4 +1589,7 @@ module.exports = {
   generateAffiliateRegistrationEmail,
   generateNewReferralCommissionEarnedEmail,
   generateAffiliateCommissionPayoutEmail,
+  generateAffiliateNewSignupEmail,
+  generateReferredUserWelcomeEmail,
+  generateAffiliateSubscriptionCommissionEmail,
 };
