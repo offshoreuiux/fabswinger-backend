@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const NotificationService = require("../services/notificationService");
 const User = require("../models/user/UserSchema");
 const Friends = require("../models/FriendRequestSchema");
+const SubscriptionSchema = require("../models/payment/SubscriptionSchema");
 const { getIO } = require("../utils/socket");
 
 const createPost = async (req, res) => {
@@ -22,6 +23,40 @@ const createPost = async (req, res) => {
     const uploadedImageUrls = [];
 
     let isImage = false;
+
+    //today's date range
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    //Count today's posts with media (images/videos)
+    const todayPostCount = await Post.countDocuments({
+      userId,
+      images: { $exists: true, $ne: [] },
+      createdAt: { $gte: startOfDay, $lte: endOfDay },
+    });
+    console.log("Today's post count:", todayPostCount);
+
+    // ✅ Step 3: Check user's subscription
+    const subscription = await SubscriptionSchema.findOne({ userId });
+    console.log("subscription?.status:", subscription?.status);
+
+    // ✅ Step 4: Enforce limits
+    if (
+      (!subscription && todayPostCount >= 1) ||
+      (subscription?.status !== "active" && todayPostCount >= 1) ||
+      (subscription?.status === "active" && todayPostCount >= 10)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          subscription?.status === "active"
+            ? "Daily post limit (10) reached. Try again tomorrow."
+            : "Daily post limit (1) reached. Upgrade your plan to post more.",
+      });
+    }
 
     if (req.files && req.files.length > 0) {
       for (let file of req.files) {
