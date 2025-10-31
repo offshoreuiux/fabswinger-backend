@@ -2,6 +2,7 @@ const Meet = require("../../models/meet/MeetSchema");
 const MeetParticipant = require("../../models/meet/MeetParticipantSchema");
 const NotificationService = require("../../services/notificationService");
 const Notification = require("../../models/NotificationSchema");
+const SubscriptionSchema = require("../../models/payment/SubscriptionSchema");
 
 const applyToMeet = async (req, res) => {
   try {
@@ -26,6 +27,53 @@ const applyToMeet = async (req, res) => {
         currentStatus: existingParticipant.status,
       });
     }
+
+    // 🔹 Step 3: Fetch subscription status
+    const subscription = await SubscriptionSchema.findOne({ userId });
+    const isSubscribed = subscription?.status === "active";
+
+    // 🔹 Step 4: Fetch all approved meet participations (excluding organizer role)
+    const approvedParticipants = await MeetParticipant.find({
+      userId,
+      // status: "approved",
+      role: { $ne: "organizer" }, // ✅ exclude meets they created
+    }).populate("meetId", "_id date time userId");
+
+    const now = new Date();
+
+    // 🔹 Step 5: Filter active meets (upcoming)
+    const activeMeets = approvedParticipants.filter((p) => {
+      if (!p.meetId || !p.meetId.date) return false;
+
+      const meetDateTime = new Date(p.meetId.date);
+      if (p.meetId.time) {
+        const [hours, minutes] = p.meetId.time.split(":").map(Number);
+        meetDateTime.setHours(hours || 0, minutes || 0, 0, 0);
+      }
+
+      // ✅ only count meets where the user is NOT the creator
+      if (String(p.meetId.userId) === String(userId)) return false;
+
+      return meetDateTime >= now;
+    });
+
+    const activeCount = activeMeets.length;
+
+    // 🔹 Step 6: Enforce participation limits
+    if (!isSubscribed && activeCount >= 1) {
+      return res.status(403).json({
+        error:
+          "You can attend only one meet at a time. You can join another after your current meet has ended.",
+      });
+    }
+
+    if (isSubscribed && activeCount >= 10) {
+      return res.status(403).json({
+        error:
+          "You’ve reached your limit of 10 active meets. You can join new ones once some are completed.",
+      });
+    }
+
 
     // Check if meet is full
     const participantCount = await MeetParticipant.countDocuments({
