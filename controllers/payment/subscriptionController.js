@@ -240,7 +240,7 @@ const createCheckoutSession = async (req, res) => {
           email: user.email,
           name: user.nickname || user.username,
           metadata: {
-            userId: user._id.toString(),
+            userId: userId,
           },
         });
 
