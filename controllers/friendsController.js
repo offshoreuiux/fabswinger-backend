@@ -90,6 +90,9 @@ const getFriendList = async (req, res) => {
     }
 
     const total = allFriends.length;
+    console.log(
+      `✅ Get Friend List API successful for userId: ${userId} - returned ${processedFriendList.length} friends`
+    );
     res.json({
       friendList: processedFriendList,
       total,
@@ -120,6 +123,10 @@ const getBlockedFriendList = async (req, res) => {
         blockedUsersList.push(friend.sender);
       }
     });
+
+    console.log(
+      `✅ Get Blocked Friend List API successful for userId: ${userId} - returned ${blockedUsersList.length} blocked users`
+    );
 
     res.json({ blockedUsersList });
   } catch (error) {
@@ -186,6 +193,10 @@ const addFriend = async (req, res) => {
       // Don't fail the request if notification fails
     }
 
+    console.log(
+      `✅ Add Friend API successful - userId: ${userId} sent request to friendId: ${friendId}`
+    );
+
     res.status(200).json({
       message: "Friend request sent successfully",
       friendRequest: friend,
@@ -238,6 +249,10 @@ const removeFriend = async (req, res) => {
       console.log("notification deleted", userId, id, notification);
     }
 
+    console.log(
+      `✅ Remove Friend API successful for userId: ${userId} - removed friendId: ${id}`
+    );
+
     res.status(200).json({
       message: "Friend removed successfully",
       friendId: id,
@@ -282,6 +297,10 @@ const blockProfile = async (req, res) => {
         return res.status(400).json({ error: "Error blocking profile" });
       }
     }
+
+    console.log(
+      `✅ Block Profile API successful for userId: ${userId} - blocked friendId: ${friendId}`
+    );
 
     res.status(200).json({ message: "Profile blocked successfully" });
   } catch (error) {
@@ -348,6 +367,10 @@ const acceptFriendRequest = async (req, res) => {
       // Don't fail the request if notification fails
     }
 
+    console.log(
+      `✅ Accept Friend Request API successful for userId: ${userId} - accepted friendId: ${friendId}`
+    );
+
     res.status(200).json({ message: "Friend request accepted successfully" });
   } catch (error) {
     console.log("Error in fetching friend list", error);
@@ -413,6 +436,10 @@ const rejectFriendRequest = async (req, res) => {
     //   console.error("Error creating notification:", notificationError);
     //   // Don't fail the request if notification fails
     // }
+
+    console.log(
+      `✅ Reject Friend Request API successful for userId: ${userId} - rejected friendId: ${friendId}`
+    );
 
     res.status(200).json({
       message: "Friend request rejected successfully",
@@ -487,6 +514,10 @@ const getOtherUserFriendList = async (req, res) => {
       $or: [{ sender: userId }, { receiver: userId }],
       status: { $nin: ["rejected", "blocked"] },
     });
+
+    console.log(
+      `✅ Get Other User Friend List API successful - userId: ${userId} viewed by currentUser: ${currentUserId}`
+    );
 
     res.json({
       success: true,

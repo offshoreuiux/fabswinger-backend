@@ -26,6 +26,7 @@ const createReport = async (req, res) => {
       reportDetails,
       reportedContent,
     });
+    console.log(`✅ Create Report API successful - reportId: ${report._id}`);
     res.status(201).json({ message: "Report created successfully", report });
   } catch (error) {
     return res
@@ -48,6 +49,9 @@ const getReports = async (req, res) => {
     const total = await Report.countDocuments();
     const totalPages = Math.ceil(total / limit);
     const hasMore = page < totalPages;
+    console.log(
+      `✅ Get Reports API successful - returned ${reports.length} reports`
+    );
     res.status(200).json({
       message: "Reports fetched successfully",
       reports,

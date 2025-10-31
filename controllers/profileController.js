@@ -69,6 +69,8 @@ const updateProfile = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    console.log(`✅ Update Profile API successful for userId: ${userId}`);
+
     res.json({
       message: "Profile updated successfully",
       user: updatedUser,
@@ -106,6 +108,8 @@ const updatePassword = async (req, res) => {
 
     user.password = hashedPassword;
     await user.save();
+
+    console.log(`✅ Update Password API successful for userId: ${userId}`);
 
     res.json({ message: "Password updated successfully" });
   } catch (error) {
@@ -162,6 +166,8 @@ const getProfile = async (req, res) => {
       winkCount: totalWinks,
       reviewSummary: reviewSummaryData,
     };
+
+    console.log(`✅ Get Profile API successful for userId: ${user._id}`);
 
     res.json({ user: userWithWinkCount });
   } catch (error) {
@@ -397,6 +403,10 @@ const getProfiles = async (req, res) => {
     const totalPages = Math.ceil(totalCount / parseInt(limit));
     const currentPage = parseInt(page);
 
+    console.log(
+      `✅ Get Profiles API successful - returned ${profilesWithFriendRequests.length} profiles`
+    );
+
     res.json({
       profiles: profilesWithFriendRequests,
       total: totalCount,
@@ -475,6 +485,8 @@ const getProfileById = async (req, res) => {
       userWithRequest.reviewSummary = reviewSummaryData;
     }
 
+    console.log(`✅ Get Profile By ID API successful for userId: ${id}`);
+
     res.json({ user: userWithRequest });
   } catch (error) {
     console.log("error111");
@@ -494,6 +506,7 @@ const getPublicProfileById = async (req, res) => {
     if (!user.settings.nonMemberVisibility) {
       return res.status(404).json({ error: "User has his profile hidden" });
     }
+    console.log(`✅ Get Public Profile By ID API successful for userId: ${id}`);
     res.json({ user });
   } catch (error) {
     console.error("Get public profile by ID error:", error);
@@ -537,6 +550,8 @@ const updateProfileImage = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    console.log(`✅ Update Profile Image API successful for userId: ${userId}`);
+
     res.json({
       message: "Profile image updated successfully",
       profileImage: updatedUser.profileImage,
@@ -568,6 +583,10 @@ const deleteProfileImage = async (req, res) => {
       user.profileImage = "";
       user.updatedAt = new Date();
       await user.save();
+
+      console.log(
+        `✅ Delete Profile Image API successful for userId: ${userId}`
+      );
 
       res.json({
         message: "Image deleted successfully",
@@ -608,6 +627,7 @@ const updateLocation = async (req, res) => {
       coordinates: [longitude, latitude],
     };
     await user.save();
+    console.log(`✅ Update Location API successful for userId: ${userId}`);
     res.json({
       message: "Location updated successfully",
       geoLocation: user.geoLocation,
@@ -629,6 +649,9 @@ const updateProfileSettings = async (req, res) => {
     const newSettings = { ...user.settings, [setting]: value };
     user.settings = newSettings;
     await user.save();
+    console.log(
+      `✅ Update Profile Settings API successful for userId: ${userId}`
+    );
     res.json({
       message: "Profile settings updated successfully",
       settings: newSettings,
@@ -704,6 +727,7 @@ const getOnlineUsers = async (req, res) => {
     const onlineUsers = await User.countDocuments({ isOnline: true });
     // const onlineUsers = 1;
     console.log("onlineUsers", onlineUsers);
+    console.log(`✅ Get Online Users API successful - count: ${onlineUsers}`);
     res.json({ onlineUsers });
   } catch (error) {
     console.error("Error in getOnlineUsers:", error);
@@ -755,6 +779,10 @@ const createUserReview = async (req, res) => {
       .populate("reviewerId", "username profileImage")
       .populate("reviewedId", "username profileImage");
 
+    console.log(
+      `✅ Create User Review API successful - reviewerId: ${reviewerId}, reviewedId: ${reviewedId}`
+    );
+
     res.status(201).json({
       message: "User review created successfully",
       review: reviewData,
@@ -780,6 +808,9 @@ const getUserReviews = async (req, res) => {
       .populate("reviewedId", "username profileImage")
       .sort({ createdAt: -1 });
     console.log("userReviews", userReviews);
+    console.log(
+      `✅ Get User Reviews API successful for userId: ${userId} - returned ${userReviews.length} reviews`
+    );
     res.status(200).json({ userReviews });
   } catch (error) {
     console.error("Error in getUserReviews:", error);

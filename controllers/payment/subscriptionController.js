@@ -83,6 +83,10 @@ const registerAffiliate = async (req, res) => {
   });
   console.log("emailResponse", emailResponse);
 
+  console.log(
+    `✅ Register Affiliate API successful for user: ${user.username}`
+  );
+
   return res.status(200).json({
     message: "Affiliate registered successfully",
     success: true,
@@ -112,6 +116,8 @@ const trackReferral = async (req, res) => {
     });
     await referral.save();
 
+    console.log(`✅ Track Referral API successful for user: ${referredUserId}`);
+
     return res
       .status(200)
       .json({ message: "Referral tracked successfully", success: true });
@@ -133,14 +139,14 @@ const createCheckoutSession = async (req, res) => {
       priceId
     );
 
-    const user = await User.findOne({ _id: userId });
+    const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
     // Check if user already has an active subscription
     const existingSubscription = await subscriptionSchema.findOne({
-      userId: userId,
+      userId: user._id,
       status: { $in: ["active", "trialing"] },
     });
 
@@ -157,9 +163,9 @@ const createCheckoutSession = async (req, res) => {
     });
 
     let isFreeLifeTime = false;
-    if (freeSubscriptionsCount < 500) {
-      isFreeLifeTime = true;
-    }
+    // if (freeSubscriptionsCount < 500) {
+    //   isFreeLifeTime = true;
+    // }
 
     console.log(
       "Free subscriptions count:",
@@ -196,7 +202,7 @@ const createCheckoutSession = async (req, res) => {
         const commission = 500; // £5.00 in minor units (pence)
         await Commission.create({
           affiliateId: affiliate._id,
-          referredUserId: userId,
+          referredUserId: user._id,
           subscriptionId: subscription._id,
           amount: commission,
           status: "pending",
@@ -207,6 +213,10 @@ const createCheckoutSession = async (req, res) => {
         affiliate.pendingPayout = (affiliate.pendingPayout || 0) + commission;
         await affiliate.save();
       }
+
+      console.log(
+        `✅ Create Checkout Session API successful (Free Lifetime) for user: ${user.username}`
+      );
 
       return res.status(200).json({
         message: "Free lifetime subscription activated successfully!",
@@ -247,12 +257,12 @@ const createCheckoutSession = async (req, res) => {
         }
         // Check if user was already referred
         const existingReferral = await Referral.findOne({
-          referredUserId: userId,
+          referredUserId: user._id,
         });
         if (!existingReferral) {
           await Referral.create({
             affiliateId: affiliate._id,
-            referredUserId: userId,
+            referredUserId: user._id,
             referredEmail: user.email,
           });
         }
@@ -272,12 +282,15 @@ const createCheckoutSession = async (req, res) => {
         success_url: `${process.env.FRONTEND_URL}/#/subscriptions?success=true`,
         cancel_url: `${process.env.FRONTEND_URL}/#/subscriptions?canceled=true`,
         metadata: {
-          userId: user._id.toString(),
+          userId: user._id,
           ...(user.affiliateOf ? { referralCode: user.affiliateOf } : {}),
         },
       });
 
       console.log("Checkout session created successfully:", session);
+      console.log(
+        `✅ Create Checkout Session API successful (Paid) for user: ${user.username}`
+      );
       return res.status(200).json({
         message: "Checkout session created successfully",
         success: true,
@@ -307,12 +320,19 @@ const getSubscriptionStatus = async (req, res) => {
     const subscription = await subscriptionSchema.findOne({ userId });
 
     if (!subscription) {
+      console.log(
+        `✅ Get Subscription Status API successful (No subscription) for userId: ${userId}`
+      );
       return res.status(200).json({
         hasSubscription: false,
         isFreeLifeTime: false,
         status: null,
       });
     }
+
+    console.log(
+      `✅ Get Subscription Status API successful for userId: ${userId}`
+    );
 
     return res.status(200).json({
       hasSubscription: true,
@@ -352,6 +372,8 @@ const cancelSubscription = async (req, res) => {
       subscription.cancelAtPeriodEnd = true;
       await subscription.save();
     }
+
+    console.log(`✅ Cancel Subscription API successful for userId: ${userId}`);
 
     return res.status(200).json({
       message: "Subscription will be canceled at the end of the current period",
@@ -395,6 +417,10 @@ const reactivateSubscription = async (req, res) => {
       subscription.status = "active";
       await subscription.save();
     }
+
+    console.log(
+      `✅ Reactivate Subscription API successful for userId: ${userId}`
+    );
 
     return res.status(200).json({
       message: "Subscription has been reactivated successfully",
@@ -478,6 +504,12 @@ const payoutAffiliate = async (req, res) => {
       ),
     });
 
+    console.log(
+      `✅ Payout Affiliate API successful for affiliate: ${
+        affiliate.userId.username
+      }, amount: £${totalAmount / 100}`
+    );
+
     return res.status(200).json({
       message: "Payout processed",
       success: true,
@@ -521,6 +553,8 @@ const getAffiliateFunds = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
+
+    console.log(`✅ Get Affiliate Funds API successful for userId: ${userId}`);
 
     res.json({
       _id: affiliate._id,

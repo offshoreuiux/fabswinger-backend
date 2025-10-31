@@ -34,6 +34,9 @@ const listUsers = async (req, res) => {
     ]);
 
     const hasMore = page * limit < total;
+    console.log(
+      `✅ List Users API successful - returned ${users.length} users`
+    );
     res.json({ users, total, page, hasMore });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch users" });
@@ -50,6 +53,9 @@ const toggleUserActivation = async (req, res) => {
     }
     user.isActive = !user.isActive;
     await user.save();
+    console.log(
+      `✅ Toggle User Activation API successful for userId: ${userId} - isActive: ${user.isActive}`
+    );
     res.json({
       user,
       message: user.isActive ? "User activated" : "User deactivated",
@@ -87,6 +93,10 @@ const fetchVerificationRequests = async (req, res) => {
 
     const total = await Verification.countDocuments(query);
     const hasMore = limit == verificationRequests.length;
+
+    console.log(
+      `✅ Fetch Verification Requests API successful - returned ${verificationRequests.length} requests`
+    );
 
     res.status(200).json({
       verifications: verificationRequests,
@@ -168,6 +178,10 @@ const verifyVerification = async (req, res) => {
     const emailResponse = await sendMail(mailOptions);
     console.log("emailResponse", emailResponse);
 
+    console.log(
+      `✅ Verify Verification API successful - ${entityType} ${status} for verificationId: ${verificationId}`
+    );
+
     res.json({
       message:
         status === "verified"
@@ -200,6 +214,8 @@ const getVerificationStats = async (req, res) => {
         isVerified: true,
       }),
     ]);
+
+    console.log(`✅ Get Verification Stats API successful`);
 
     res.json({
       pendingUserVerifications,
