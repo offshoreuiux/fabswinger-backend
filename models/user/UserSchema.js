@@ -72,11 +72,30 @@ const userSchema = new mongoose.Schema(
     },
     gender: {
       type: String,
-      enum: ["man", "woman", "coupleMF", "coupleMM", "coupleFF", "TVTSCD"],
+      enum: [
+        "man",
+        "woman",
+        "coupleMF",
+        "coupleMM",
+        "coupleFF",
+        "TVTSCD",
+        "other",
+        "preferNotToSay",
+      ],
     },
     sexuality: {
       type: String,
-      enum: ["straight", "gay", "bisexual", "asexual", "pansexual", "other"],
+      enum: [
+        "straight",
+        "gay",
+        "bisexual",
+        "asexual",
+        "pansexual",
+        "lesbian",
+        "queer",
+        "other",
+        "preferNotToSay",
+      ],
     },
     dateOfBirth: {
       type: Date,
