@@ -136,25 +136,33 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 const userImageVerification = async (req, res) => {
   try {
     const { userId = "", email = "" } = req.body;
+    console.log("start userImageVerification");
 
     console.log("userId", userId, email);
 
     let user;
     if (userId) {
+      console.log("userId found");
       user = await User.findById(userId);
     } else {
+      console.log("email found");
       user = await User.findOne({ email });
     }
 
     if (!user) {
+      console.log("username found");
       user = await User.findOne({ username: email });
     }
 
     if (!user) {
+      console.log("user not found");
       return res.status(404).json({ message: "User not found" });
     }
 
+    console.log("user found", user);
+
     if (!req.file) {
+      console.log("file not found");
       return res
         .status(400)
         .json({ message: "Verification image is required" });
