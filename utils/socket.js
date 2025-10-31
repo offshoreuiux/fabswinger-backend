@@ -193,7 +193,7 @@ function initSocket(server) {
         console.log("subscription?.status", subscription?.status);
 
         if (
-          !subscription ||
+          (!subscription && count > 10) ||
           (subscription?.status !== "active" && count >= 10)
         ) {
           console.error(
