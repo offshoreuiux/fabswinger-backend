@@ -1,6 +1,7 @@
 const Friends = require("../models/FriendRequestSchema");
 const NotificationService = require("../services/notificationService");
 const User = require("../models/user/UserSchema");
+const SubscriptionSchema = require("../models/payment/SubscriptionSchema");
 const Notification = require("../models/NotificationSchema");
 const { sendMail } = require("../utils/transporter");
 const { generateFriendRequestEmail } = require("../utils/emailTemplates");
@@ -159,6 +160,40 @@ const addFriend = async (req, res) => {
 
     if (existing) {
       return res.status(400).json({ error: "Friendship request already sent" });
+    }
+
+    const friendCount = await Friends.countDocuments({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: { $nin: ["rejected", "blocked"] },
+    });
+
+    const subscription = await SubscriptionSchema.findOne({
+      userId: userId,
+    });
+
+    if (!subscription || subscription.status !== "active") {
+      if (friendCount >= 30) {
+        return res.status(400).json({
+          error:
+            "You have reached the friend limit ,upgrade to gold supporter plan to add more friends",
+        });
+      }
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0); // today 00:00
+
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999); // today 23:59
+
+      const count = await Friends.countDocuments({
+        sender: userId,
+        createdAt: { $gte: startOfDay, $lte: endOfDay },
+      });
+      if (count >= 3) {
+        return res.status(400).json({
+          error:
+            "You have reached the friend limit for today ,upgrade to gold supporter plan to add more friends",
+        });
+      }
     }
 
     const friend = await Friends.create({
