@@ -282,7 +282,7 @@ const createCheckoutSession = async (req, res) => {
         success_url: `${process.env.FRONTEND_URL}/#/subscriptions?success=true`,
         cancel_url: `${process.env.FRONTEND_URL}/#/subscriptions?canceled=true`,
         metadata: {
-          userId: user._id,
+          userId: userId,
           ...(user.affiliateOf ? { referralCode: user.affiliateOf } : {}),
         },
       });
