@@ -1,6 +1,7 @@
 const Chat = require("../../models/chats/ChatSchema");
 const Message = require("../../models/chats/MessageSchema");
 const Friend = require("../../models/FriendRequestSchema");
+const SubscriptionSchema = require("../../models/payment/SubscriptionSchema");
 
 const createChat = async (req, res) => {
   try {
@@ -53,7 +54,7 @@ const createChat = async (req, res) => {
         !name ||
         !memberIds ||
         !Array.isArray(memberIds) ||
-        memberIds.length < 2
+        memberIds.length < 1
       ) {
         return res.status(400).json({
           message: "Group name and at least 2 members are required",
@@ -69,6 +70,28 @@ const createChat = async (req, res) => {
         });
       }
 
+      // Check if ALL members have active subscriptions
+      const subscriptions = await SubscriptionSchema.find({
+        userId: { $in: allMembers.map((member) => member.toString()) },
+        status: "active",
+      });
+      console.log("subscriptions:", subscriptions);
+
+      // Verify that every member has an active subscription
+      const membersWithSubscription = subscriptions.map((sub) =>
+        sub.userId.toString()
+      );
+      const allMembersHaveSubscription = allMembers.every((memberId) =>
+        membersWithSubscription.includes(memberId.toString())
+      );
+
+      if (!allMembersHaveSubscription) {
+        return res.status(400).json({
+          message:
+            "All members must have an active subscription to create a group chat",
+        });
+      }
+
       const newChat = await Chat.create({
         members: allMembers,
         type: "group",
@@ -80,7 +103,7 @@ const createChat = async (req, res) => {
       await newChat.populate("members", "username profileImage");
       await newChat.populate("admin", "username profileImage");
 
-      res.status(201).json(newChat);
+      res.status(201).json({ chat: newChat, success: true });
     } else {
       return res.status(400).json({ message: "Invalid chat type" });
     }
@@ -282,6 +305,30 @@ const updateGroup = async (req, res) => {
   }
 };
 
+const deleteGroup = async (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+    if (!chatId || !userId) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    const chat = await Chat.findById(chatId);
+    if (!chat) {
+      return res.status(404).json({ message: "Chat not found" });
+    }
+    if (chat.admin.toString() !== userId) {
+      return res
+        .status(400)
+        .json({ message: "You are not the admin of this group" });
+    }
+    await chat.deleteOne();
+    res.status(200).json({ message: "Group deleted successfully", chat });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createChat,
   getChats,
@@ -289,4 +336,5 @@ module.exports = {
   clearChat,
   leaveGroup,
   updateGroup,
+  deleteGroup,
 };

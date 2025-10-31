@@ -10,6 +10,7 @@ const NotificationService = require("../services/notificationService");
 const { sendMail } = require("../utils/transporter");
 const { generateProfileWinkEmail } = require("../utils/emailTemplates");
 const UserReview = require("../models/user/UserReviewScehema");
+const SubscriptionSchema = require("../models/payment/SubscriptionSchema");
 
 // Update user profile
 const updateProfile = async (req, res) => {
@@ -161,10 +162,15 @@ const getProfile = async (req, res) => {
       reviewDoneBy: reviewDoneByData,
     };
 
+    const subscription = await SubscriptionSchema.findOne({
+      userId: user._id,
+    });
+
     const userWithWinkCount = {
       ...user.toObject(),
       winkCount: totalWinks,
       reviewSummary: reviewSummaryData,
+      subscription: subscription || null,
     };
 
     console.log(`✅ Get Profile API successful for userId: ${user._id}`);
@@ -395,6 +401,10 @@ const getProfiles = async (req, res) => {
           status: "accepted",
         });
         profileWithRequest.isFriend = Boolean(acceptedFriendship);
+        const subscription = await SubscriptionSchema.findOne({
+          userId: profile._id,
+        });
+        profileWithRequest.subscription = subscription || null;
 
         return profileWithRequest;
       })
@@ -484,6 +494,11 @@ const getProfileById = async (req, res) => {
 
       userWithRequest.reviewSummary = reviewSummaryData;
     }
+
+    const subscription = await SubscriptionSchema.findOne({
+      userId: user._id,
+    });
+    userWithRequest.subscription = subscription || null;
 
     console.log(`✅ Get Profile By ID API successful for userId: ${id}`);
 

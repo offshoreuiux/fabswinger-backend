@@ -151,20 +151,9 @@ const addFriend = async (req, res) => {
       return res.status(400).json({ error: "Cannot send request to yourself" });
     }
 
-    const existing = await Friends.findOne({
-      $or: [
-        { sender: userId, receiver: friendId },
-        { sender: friendId, receiver: userId },
-      ],
-    });
-
-    if (existing) {
-      return res.status(400).json({ error: "Friendship request already sent" });
-    }
-
-    const friendCount = await Friends.countDocuments({
-      $or: [{ sender: userId }, { receiver: userId }],
-      status: { $nin: ["rejected", "blocked"] },
+    const friendRequestSentCount = await Friends.countDocuments({
+      sender: userId,
+      status: { $nin: ["blocked"] },
     });
 
     const subscription = await SubscriptionSchema.findOne({
@@ -172,10 +161,10 @@ const addFriend = async (req, res) => {
     });
 
     if (!subscription || subscription.status !== "active") {
-      if (friendCount >= 30) {
+      if (friendRequestSentCount >= 30) {
         return res.status(400).json({
           error:
-            "You have reached the friend limit ,upgrade to gold supporter plan to add more friends",
+            "You have reached the limit of sending friend requests ,upgrade to gold supporter plan to add more friends",
         });
       }
       const startOfDay = new Date();
@@ -184,16 +173,71 @@ const addFriend = async (req, res) => {
       const endOfDay = new Date();
       endOfDay.setHours(23, 59, 59, 999); // today 23:59
 
-      const count = await Friends.countDocuments({
+      const friendRequestSentCountForToday = await Friends.countDocuments({
         sender: userId,
         createdAt: { $gte: startOfDay, $lte: endOfDay },
+        status: { $nin: ["blocked"] },
       });
-      if (count >= 3) {
+      if (friendRequestSentCountForToday >= 3) {
         return res.status(400).json({
           error:
-            "You have reached the friend limit for today ,upgrade to gold supporter plan to add more friends",
+            "You have reached the limit of sending friend requests for today ,upgrade to gold supporter plan to add more friends",
         });
       }
+    }
+
+    const existing = await Friends.findOne({
+      $or: [
+        { sender: userId, receiver: friendId },
+        { sender: friendId, receiver: userId },
+      ],
+      status: { $nin: ["accepted", "rejected", "blocked"] },
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: "Friendship request already sent" });
+    }
+
+    const ifFriendReqRejected = await Friends.findOne({
+      $or: [
+        { sender: userId, receiver: friendId, status: "rejected" },
+        { sender: friendId, receiver: userId, status: "rejected" },
+      ],
+    });
+    if (ifFriendReqRejected) {
+      ifFriendReqRejected.status = "pending";
+      ifFriendReqRejected.createdAt = new Date();
+      ifFriendReqRejected.updatedAt = new Date();
+      ifFriendReqRejected.sender = userId;
+      ifFriendReqRejected.receiver = friendId;
+      await ifFriendReqRejected.save();
+
+      try {
+        const user = await User.findById(friendId);
+        await NotificationService.createFriendRequestNotification(
+          userId,
+          friendId,
+          ifFriendReqRejected._id
+        );
+        if (user?.settings?.getFriendInvites) {
+          const mailOptions = {
+            to: user.email,
+            subject: "New Friend Request",
+            html: generateFriendRequestEmail(userId, friendId),
+            from: process.env.SENDGRID_FROM_EMAIL || process.env.SMTP_USER,
+          };
+          await sendMail(mailOptions);
+        }
+      } catch (notificationError) {
+        console.error("Error creating notification:", notificationError);
+        // Don't fail the request if notification fails
+      }
+
+      return res.status(200).json({
+        message: "Friendship request re-sent successfully",
+        friendRequest: ifFriendReqRejected,
+        success: true,
+      });
     }
 
     const friend = await Friends.create({
@@ -424,7 +468,7 @@ const rejectFriendRequest = async (req, res) => {
     }
     const userId = req.user.userId;
 
-    const friend = await Friends.findOneAndDelete({
+    const friend = await Friends.findOne({
       $or: [
         { sender: userId, receiver: friendId, status: "pending" },
         { sender: friendId, receiver: userId, status: "pending" },
@@ -434,6 +478,9 @@ const rejectFriendRequest = async (req, res) => {
     if (!friend) {
       return res.status(400).json({ error: "Friendship not found" });
     }
+
+    friend.status = "rejected";
+    await friend.save();
 
     // Find and update the original friend request notification
     try {
