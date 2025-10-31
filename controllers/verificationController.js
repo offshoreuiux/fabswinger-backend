@@ -49,6 +49,9 @@ const startAgeOver18VerifyUser = async (req, res) => {
         acr_values: "eidas2:LoA Substantial",
       });
 
+    console.log(
+      `✅ Start Age Over 18 Verify User API successful for userId: ${userId}`
+    );
     // Redirect user to OneID
     return res.status(200).json({ redirectUrl: url });
   } catch (err) {
@@ -116,6 +119,8 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
     // if (!verificationData.verified) {
     //   return res.status(400).json({ message: "User not verified" });
     // }
+
+    console.log(`✅ Callback Age Over 18 Verify User API successful`);
 
     return res.status(200).json({
       message: "User age over 18 verified successfully",
@@ -219,6 +224,10 @@ const userImageVerification = async (req, res) => {
     await sendMail(userMailOptions);
     await sendMail(adminMailOptions);
 
+    console.log(
+      `✅ User Image Verification API successful for userId: ${user._id}`
+    );
+
     return res
       .status(200)
       .json({ message: "Verification submitted successfully", success: true });
@@ -289,6 +298,8 @@ const clubVerification = async (req, res) => {
 
     await sendMail(userMailOptions);
     await sendMail(adminMailOptions);
+
+    console.log(`✅ Club Verification API successful for clubId: ${clubId}`);
 
     return res
       .status(200)

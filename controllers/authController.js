@@ -176,6 +176,8 @@ const signup = async (req, res) => {
       }
     );
 
+    console.log(`✅ Signup API successful for user: ${newUser.username}`);
+
     res.status(201).json({
       success: true,
       message: "Signup successful",
@@ -300,6 +302,8 @@ const login = async (req, res) => {
     }
     await user.save();
 
+    console.log(`✅ Login API successful for user: ${user.username}`);
+
     res.json({
       token,
       keepSignedIn: shouldKeepSignedIn,
@@ -339,6 +343,8 @@ const verifyToken = async (req, res) => {
     }
 
     const subscription = await Subscription.findOne({ userId });
+
+    console.log(`✅ Verify Token API successful for user: ${user.username}`);
 
     res.status(200).json({
       user: {
@@ -381,6 +387,7 @@ const forgotPassword = async (req, res) => {
       user.passwordResetCode = code;
       user.passwordResetCodeExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
       await user.save();
+      console.log(`✅ Forgot Password API successful for email: ${email}`);
       res.json({ success: true, message: "Password reset code sent to email" });
     } catch (err) {
       console.log("Email error:", err?.message || err);
@@ -409,6 +416,9 @@ const verifyPasswordResetCode = async (req, res) => {
     ) {
       return res.status(400).json({ error: "Invalid code", success: false });
     }
+    console.log(
+      `✅ Verify Password Reset Code API successful for email: ${email}`
+    );
     res.json({
       message:
         "Code verified successfully, navigating to create new password page",
@@ -449,6 +459,7 @@ const resetPassword = async (req, res) => {
     user.passwordResetCode = null;
     user.passwordResetCodeExpires = null;
     await user.save();
+    console.log(`✅ Reset Password API successful for email: ${email}`);
     res.json({
       message: "Password reset successfully",
       success: true,

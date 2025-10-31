@@ -12,6 +12,9 @@ const getClubReviews = async (req, res) => {
       "userId",
       "username profileImage"
     );
+    console.log(
+      `✅ Get Club Reviews API successful for clubId: ${clubId} - returned ${reviews.length} reviews`
+    );
     res.status(200).json(reviews);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -43,6 +46,9 @@ const createClubReview = async (req, res) => {
     const newReview = new ClubReview({ clubId, userId, review, rating });
     await newReview.save();
     await newReview.populate("userId", "username profileImage");
+    console.log(
+      `✅ Create Club Review API successful for clubId: ${clubId} by userId: ${userId}`
+    );
     res.status(201).json(newReview);
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -19,6 +19,10 @@ const getCountries = async (req, res) => {
       );
     }
 
+    console.log(
+      `✅ Get Countries API successful - returned ${countriesData.length} countries`
+    );
+
     res.json({
       success: true,
       countries: countriesData,

@@ -6,6 +6,7 @@ const getOnlineUserCount = async (req, res) => {
     // Return from in-memory map directly for accurate count
     const users = (await getOnlineUsers(100000)) || [];
     const count = users.length;
+    console.log(`✅ Get Online User Count API successful - count: ${count}`);
     return res.json({ onlineUsers: count });
   } catch (error) {
     console.error("Error in getOnlineUserCount:", error);

@@ -35,6 +35,10 @@ const getUserNotifications = async (req, res) => {
       }
     }
 
+    console.log(
+      `✅ Get User Notifications API successful for userId: ${userId} - returned ${result.notifications.length} notifications`
+    );
+
     res.json(result);
   } catch (error) {
     console.error("Error getting notifications:", error);
@@ -71,6 +75,10 @@ const markNotificationAsRead = async (req, res) => {
       console.error("Socket emission error:", socketError);
     }
 
+    console.log(
+      `✅ Mark Notification As Read API successful for notificationId: ${notificationId}`
+    );
+
     res.json({ message: "Notification marked as read", notification });
   } catch (error) {
     console.error("Error marking notification as read:", error);
@@ -96,6 +104,10 @@ const markAllNotificationsAsRead = async (req, res) => {
     } catch (socketError) {
       console.error("Socket emission error:", socketError);
     }
+
+    console.log(
+      `✅ Mark All Notifications As Read API successful for userId: ${userId} - modified ${result.modifiedCount} notifications`
+    );
 
     res.json({
       message: "All notifications marked as read",
@@ -133,6 +145,10 @@ const deleteNotification = async (req, res) => {
       console.error("Socket emission error:", socketError);
     }
 
+    console.log(
+      `✅ Delete Notification API successful for notificationId: ${notificationId}`
+    );
+
     res.json({ message: "Notification deleted successfully" });
   } catch (error) {
     console.error("Error deleting notification:", error);
@@ -147,6 +163,10 @@ const getUnreadCount = async (req, res) => {
 
     const count = await NotificationService.getUnreadCount(userId);
 
+    console.log(
+      `✅ Get Unread Count API successful for userId: ${userId} - count: ${count}`
+    );
+
     res.json({ unreadCount: count });
   } catch (error) {
     console.error("Error getting unread count:", error);
@@ -160,6 +180,8 @@ const getFilterCounts = async (req, res) => {
     const userId = req.user.userId;
 
     const counts = await NotificationService.getFilterCounts(userId);
+
+    console.log(`✅ Get Filter Counts API successful for userId: ${userId}`);
 
     res.json({ filterCounts: counts });
   } catch (error) {

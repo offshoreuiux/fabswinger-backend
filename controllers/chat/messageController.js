@@ -92,6 +92,10 @@ const getMessages = async (req, res) => {
     const totalPages = Math.ceil(totalMessages / limitNum);
     const hasMore = pageNum < totalPages;
 
+    console.log(
+      `✅ Get Messages API successful for chatId: ${chatId} - returned ${messages.length} messages`
+    );
+
     res.status(200).json({
       success: true,
       messages: messages.reverse(), // Reverse to show oldest first
@@ -128,6 +132,10 @@ const updateMessageStatus = async (req, res) => {
     //     lastMessageTime: new Date(),
     //   },
     // });
+
+    console.log(
+      `✅ Update Message Status API successful for messageId: ${messageId}`
+    );
 
     res.status(200).json(message);
   } catch (error) {

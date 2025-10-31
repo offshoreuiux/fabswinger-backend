@@ -54,6 +54,9 @@ const handleStripeWebhook = async (req, res) => {
         console.log(`Unhandled event type ${event.type}`);
     }
 
+    console.log(
+      `✅ Stripe Webhook API successful for event type: ${event.type}`
+    );
     res.json({ received: true });
   } catch (error) {
     console.error("Webhook handler error:", error);
