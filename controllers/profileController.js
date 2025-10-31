@@ -500,7 +500,7 @@ const getProfileById = async (req, res) => {
     });
     userWithRequest.subscription = subscription || null;
 
-    console.log(`✅ Get Profile By ID API successful for userId: ${id}`);
+    console.log(`✅ Get Profile By ID API successful for userId : ${id}`);
 
     res.json({ user: userWithRequest });
   } catch (error) {
