@@ -8,6 +8,7 @@ const {
   clearChat,
   leaveGroup,
   updateGroup,
+  deleteGroup,
 } = require("../../controllers/chat/chatController");
 
 router.use(authenticateToken);
@@ -23,5 +24,7 @@ router.post("/clear/:chatId", clearChat);
 router.post("/leave/:chatId", leaveGroup);
 
 router.post("/update/:chatId", updateGroup);
+
+router.delete("/delete/:chatId", deleteGroup);
 
 module.exports = router;

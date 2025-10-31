@@ -3,6 +3,7 @@ const EventHotlist = require("../../models/hotlist/EventHotlistSchema");
 const EventParticipant = require("../../models/event/EventParticipantSchema");
 const User = require("../../models/user/UserSchema");
 const Friends = require("../../models/FriendRequestSchema");
+const SubscriptionSchema = require("../../models/payment/SubscriptionSchema");
 // const Club = require("../models/ClubSchema");
 const { v4: uuidv4 } = require("uuid");
 const { s3 } = require("../../utils/s3");
@@ -115,6 +116,43 @@ const createEvent = async (req, res) => {
       eventRules,
       region,
     } = req.body;
+
+    //Check subscription status
+    const subscription = await SubscriptionSchema.findOne({ userId });
+    console.log("subscription?.status:", subscription?.status);
+
+    if (!subscription || subscription.status !== "active") {
+      return res.status(403).json({
+        success: false,
+        message: "You need an active subscription to create events.",
+      });
+    }
+
+    //Count user's active events (not completed)
+    const userEvents = await Event.find({ userId });
+    const now = new Date();
+
+    const activeEvents = userEvents.filter((event) => {
+      const eventDateTime = new Date(event.date);
+      if (event.time) {
+        const [hours, minutes] = event.time.split(":").map(Number);
+        eventDateTime.setHours(hours || 0, minutes || 0, 0, 0);
+      }
+      // Event is considered active if it hasn't passed yet
+      return eventDateTime >= now;
+    });
+
+    const count = activeEvents.length;
+    console.log("Event Count : ", count);
+
+    //Apply event creation limits
+    if (subscription.status === "active" && count >= 5) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Event limit reached. You can have up to 5 active events at a time.",
+      });
+    }
 
     // Parse ageRange from JSON string to array
     let ageRange;
