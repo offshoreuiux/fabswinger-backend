@@ -535,6 +535,8 @@ const getAffiliateFunds = async (req, res) => {
     }
 
     let stripeBalance = { available: 0, pending: 0 };
+    let stripeAccountComplete = false;
+
     if (affiliate.stripeAccountId) {
       const balance = await stripe.balance.retrieve({
         stripeAccount: affiliate.stripeAccountId,
@@ -547,6 +549,25 @@ const getAffiliateFunds = async (req, res) => {
           (balance.pending.find((b) => b.currency === "gbp")?.amount || 0) /
           100,
       };
+
+      // Check if Stripe account is complete
+      const stripeAccount = await stripe.accounts.retrieve(
+        affiliate.stripeAccountId
+      );
+
+      console.log("Stripe Account Requirements:", {
+        currently_due: stripeAccount.requirements.currently_due,
+        eventually_due: stripeAccount.requirements.eventually_due,
+        pending_verification: stripeAccount.requirements.pending_verification,
+      });
+
+      // Account is complete when BOTH arrays are empty
+      // If either has items, account needs more info
+      stripeAccountComplete =
+        (stripeAccount.requirements.currently_due?.length === 0 ||
+          !stripeAccount.requirements.currently_due) &&
+        (stripeAccount.requirements.eventually_due?.length === 0 ||
+          !stripeAccount.requirements.eventually_due);
     }
 
     const transactions = await Commission.find({ affiliateId: affiliate._id })
@@ -554,26 +575,82 @@ const getAffiliateFunds = async (req, res) => {
       .limit(50)
       .lean();
 
-    console.log(`✅ Get Affiliate Funds API successful for userId: ${userId}`);
-
-    res.json({
+    const responseData = {
       _id: affiliate._id,
       refCode: affiliate.referralCode, // Align with frontend
       totalEarnings: (affiliate.totalEarnings || 0) / 100, // Convert pence to pounds
       pendingPayout: (affiliate.pendingPayout || 0) / 100, // Convert pence to pounds
       stripeBalance,
+      stripeAccountComplete,
+      hasStripeAccount: !!affiliate.stripeAccountId,
       transactions: transactions.map((t) => ({
         _id: t._id,
         amount: t.amount / 100, // Convert pence to pounds
         status: t.status,
         date: t.createdAt,
       })),
-    });
+    };
+
+    console.log(`✅ Get Affiliate Funds API successful for userId: ${userId}`);
+    console.log(`Stripe Account Complete Status: ${stripeAccountComplete}`);
+
+    res.json(responseData);
   } catch (error) {
     console.error("getAffiliateFunds error:", error);
     return res
       .status(500)
       .json({ message: "Internal server error", error: error.message });
+  }
+};
+
+const getStripeAccountLink = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const affiliate = await Affiliate.findOne({ userId });
+    if (!affiliate || !affiliate.stripeAccountId) {
+      return res.status(404).json({
+        message: "Affiliate not found or no stripe account",
+      });
+    }
+
+    // Check if account is complete
+    const stripeAccount = await stripe.accounts.retrieve(
+      affiliate.stripeAccountId
+    );
+
+    const isComplete =
+      !stripeAccount.requirements.currently_due?.length &&
+      !stripeAccount.requirements.eventually_due?.length;
+
+    // Generate account link - use onboarding if incomplete, update if complete
+    const accountLink = await stripe.accountLinks.create({
+      account: affiliate.stripeAccountId,
+      refresh_url: `${process.env.FRONTEND_URL}/#/affiliate?status=pending`,
+      return_url: `${process.env.FRONTEND_URL}/#/affiliate?status=success`,
+      type: isComplete ? "account_update" : "account_onboarding",
+    });
+
+    console.log(
+      `✅ Get Stripe Account Link API successful for userId: ${userId}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      url: accountLink.url,
+      isComplete,
+    });
+  } catch (error) {
+    console.error("getStripeAccountLink error:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
 
@@ -586,4 +663,5 @@ module.exports = {
   reactivateSubscription,
   payoutAffiliate,
   getAffiliateFunds,
+  getStripeAccountLink,
 };
