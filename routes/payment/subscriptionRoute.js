@@ -8,6 +8,7 @@ const {
   registerAffiliate,
   getAffiliateFunds,
   payoutAffiliate,
+  getStripeAccountLink,
 } = require("../../controllers/payment/subscriptionController");
 const { authenticateToken } = require("../../middleware");
 
@@ -35,5 +36,12 @@ router.get("/affiliate/funds", authenticateToken, getAffiliateFunds);
 
 // Payout affiliate
 router.post("/affiliate/payout", authenticateToken, payoutAffiliate);
+
+// Get Stripe account link (for completing or editing account)
+router.get(
+  "/affiliate/stripe/account-link",
+  authenticateToken,
+  getStripeAccountLink
+);
 
 module.exports = router;
