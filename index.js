@@ -81,8 +81,8 @@ app.use("/api/webhooks", webhookRoutes);
 (async () => {
   try {
     console.log("Seeding default admin user...");
-    const adminEmail = process.env.ADMIN_EMAIL || "admin@yopmail.com";
-    const adminUsername = process.env.ADMIN_USERNAME || "admin";
+    const adminEmail = process.env.ADMIN_EMAIL || "swinger@yopmail.com";
+    const adminUsername = process.env.ADMIN_USERNAME || "swinger";
     const adminPassword = process.env.ADMIN_PASSWORD || "Admin@123";
     let admin = await User.findOne({ email: adminEmail });
     if (!admin) {
