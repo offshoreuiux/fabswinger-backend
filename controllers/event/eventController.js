@@ -375,7 +375,7 @@ const getEvents = async (req, res) => {
           const filterQuery = await buildFilterQuery();
           const { sort } = parsedFilter;
 
-          let sortQuery = { date: 1 }; // Default sort
+          let sortQuery = { createdAt: -1 }; // Default sort
           if (sort === "most_popular") {
             // Use aggregation for participant count sorting
             const pipeline = [
@@ -503,7 +503,7 @@ const getEvents = async (req, res) => {
           const now = new Date();
           totalCount = await Event.countDocuments({ date: { $gte: now } });
           events = await Event.find({ date: { $gte: now } })
-            .sort({ date: 1 })
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(numericLimit);
         }
@@ -1041,9 +1041,10 @@ const getEvents = async (req, res) => {
             title: { $regex: search, $options: "i" },
             ...filterQuery,
           })
-            .sort({ date: 1 })
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(numericLimit);
+          console.log("events", events);
         }
         break;
     }
@@ -1056,7 +1057,7 @@ const getEvents = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const isUserVerified = user.verified || false;
+    const isUserVerified = user.isVerified || false;
     let userFriends = [];
 
     // Get user's friends list for friend-only events
@@ -1078,15 +1079,15 @@ const getEvents = async (req, res) => {
 
     // Filter events based on visibility rules
     const filteredEvents = events.filter((event) => {
-      // If rsvpEveryone is true, show to everyone
-      if (event.rsvpEveryone) {
-        console.log(`Event ${event.title} visible to everyone`);
-        return true;
-      }
-
       // If user is the creator, always show the event
       if (event.userId.toString() === userId.toString()) {
         console.log(`Event ${event.title} visible to creator`);
+        return true;
+      }
+
+      // If rsvpEveryone is true, show to everyone
+      if (event.rsvpEveryone) {
+        console.log(`Event ${event.title} visible to everyone`);
         return true;
       }
 
@@ -1107,9 +1108,9 @@ const getEvents = async (req, res) => {
         return isUserVerified;
       }
 
-      // Default: only show to creator (already handled above)
-      console.log(`Event ${event.title} not visible to user`);
-      return false;
+      // Default: show to everyone (no restrictions set)
+      console.log(`Event ${event.title} visible to all (no restrictions)`);
+      return true;
     });
 
     const eventsWithHotlistInfo = await addHotlistInfoToEvents(

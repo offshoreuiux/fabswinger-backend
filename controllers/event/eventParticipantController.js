@@ -2,6 +2,7 @@ const Event = require("../../models/event/EventSchema");
 const EventParticipant = require("../../models/event/EventParticipantSchema");
 const NotificationService = require("../../services/notificationService");
 const Notification = require("../../models/NotificationSchema");
+const SubscriptionSchema = require("../../models/payment/SubscriptionSchema");
 
 const applyToEvent = async (req, res) => {
   try {
@@ -24,6 +25,52 @@ const applyToEvent = async (req, res) => {
       return res.status(400).json({
         error: "You have already applied to or joined this event",
         currentStatus: existingParticipant.status,
+      });
+    }
+
+    // 🔹 Step 3: Fetch subscription status
+    const subscription = await SubscriptionSchema.findOne({ userId });
+    const isSubscribed = subscription?.status === "active";
+
+    // 🔹 Step 4: Fetch all approved event participations (excluding creators)
+    const approvedParticipants = await EventParticipant.find({
+      userId,
+      isCreator: false, // ✅ exclude events they created
+      // status: "approved",
+    }).populate("eventId", "_id date time userId");
+
+    const now = new Date();
+
+    // 🔹 Step 5: Filter active events (upcoming)
+    const activeEvents = approvedParticipants.filter((p) => {
+      if (!p.eventId || !p.eventId.date) return false;
+
+      const eventDateTime = new Date(p.eventId.date);
+      if (p.eventId.time) {
+        const [hours, minutes] = p.eventId.time.split(":").map(Number);
+        eventDateTime.setHours(hours || 0, minutes || 0, 0, 0);
+      }
+
+      // ✅ Only count events where the user is NOT the creator
+      if (String(p.eventId.userId) === String(userId)) return false;
+
+      return eventDateTime >= now; // upcoming or ongoing
+    });
+
+    const activeCount = activeEvents.length;
+
+    // 🔹 Step 6: Enforce participation limits
+    if (!isSubscribed && activeCount >= 1) {
+      return res.status(403).json({
+        error:
+          "You can attend only one event at a time. You can join another after your current event has ended.",
+      });
+    }
+
+    if (isSubscribed && activeCount >= 10) {
+      return res.status(403).json({
+        error:
+          "You’ve reached your limit of 10 active events. You can join new ones once some are completed.",
       });
     }
 

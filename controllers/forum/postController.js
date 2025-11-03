@@ -3,7 +3,7 @@ const Channel = require("../../models/forum/ChannelSchema");
 const Member = require("../../models/forum/MemberSchema");
 const Like = require("../../models/forum/PostLikeSchema");
 const PostView = require("../../models/forum/PostViewSchema");
-const { s3 } = require("../../utils/s3");
+const { s3, getS3KeyFromUrl } = require("../../utils/s3");
 const { v4: uuidv4 } = require("uuid");
 const NotificationService = require("../../services/notificationService");
 const Comment = require("../../models/forum/PostCommentSchema");
@@ -212,6 +212,13 @@ const deletePost = async (req, res) => {
     Like.deleteMany({ postId }),
     PostView.deleteMany({ postId }),
   ]);
+  const key = getS3KeyFromUrl(post.content);
+  await s3
+    .deleteObject({
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: key,
+    })
+    .promise();
   return res
     .status(200)
     .json({ success: true, message: "Post deleted successfully" });

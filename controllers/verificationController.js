@@ -12,61 +12,103 @@ const {
 } = require("../utils/emailTemplates");
 
 const startAgeOver18VerifyUser = async (req, res) => {
+  console.log("🚀 startAgeOver18VerifyUser - Request received");
+  console.log("📋 Request params:", req.params);
+
   try {
     const { userId, email } = req.params;
+    console.log(`📝 Extracted userId: ${userId}, email: ${email}`);
 
     if (!userId || !email) {
+      console.log("❌ Missing userId or email");
       return res.status(400).json({ message: "Missing userId or email" });
     }
 
+    console.log(
+      `🔍 Searching for user with _id: ${userId} and email: ${email}`
+    );
     const user = await User.findOne({ _id: userId, email: email });
+
     if (!user) {
+      console.log(`❌ User not found for userId: ${userId}, email: ${email}`);
       return res.status(404).json({ message: "User not found" });
     }
+    console.log(`✅ User found: ${user.username || user._id}`);
 
     if (!process.env.ONEID_CLIENT_ID) {
+      console.log(
+        "❌ ONEID_CLIENT_ID is not configured in environment variables"
+      );
       return res
         .status(500)
         .json({ message: "ONEID_CLIENT_ID is not configured" });
     }
+    console.log("✅ ONEID_CLIENT_ID is configured");
 
     if (!process.env.FRONTEND_URL) {
+      console.log("❌ FRONTEND_URL is not configured in environment variables");
       return res
         .status(500)
         .json({ message: "FRONTEND_URL is not configured" });
     }
+    console.log(`✅ FRONTEND_URL is configured: ${process.env.FRONTEND_URL}`);
 
     const state = `12345`;
+    console.log(`🔐 Generated state: ${state}`);
+
+    const redirectUri = `${process.env.FRONTEND_URL}/#/oneid-loading`;
+    console.log(`🔗 Redirect URI: ${redirectUri}`);
 
     const url =
       `${process.env.ONEID_BASE_URL}/v2/authorize?` +
       new URLSearchParams({
         client_id: process.env.ONEID_CLIENT_ID,
-        redirect_uri: `${process.env.FRONTEND_URL}/#/oneid-loading`,
+        redirect_uri: redirectUri,
         response_type: "code",
         state: state,
         scope: "openid age_over_18",
         acr_values: "eidas2:LoA Substantial",
       });
 
+    console.log(`🌐 OneID Authorization URL generated: ${url}`);
     console.log(
       `✅ Start Age Over 18 Verify User API successful for userId: ${userId}`
     );
+
     // Redirect user to OneID
     return res.status(200).json({ redirectUrl: url });
   } catch (err) {
-    console.error("startVerifyUser error:", err?.message || err);
+    console.error("❌ startVerifyUser error:", err?.message || err);
+    console.error("📚 Full error stack:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
 
 const callbackAgeOver18VerifyUser = async (req, res) => {
+  console.log("🚀 callbackAgeOver18VerifyUser - Callback received");
+  console.log("📋 Request query params:", req.query);
+
   const { code } = req.query;
+  console.log(
+    `📝 Extracted authorization code: ${
+      code ? code.substring(0, 20) + "..." : "N/A"
+    }`
+  );
+
   if (!code) {
+    console.log("❌ Missing authorization code");
     return res.status(400).json({ message: "Missing code or state" });
   }
+
   try {
-    const response = await fetch(`${process.env.ONEID_BASE_URL}/token`, {
+    const tokenEndpoint = `${process.env.ONEID_BASE_URL}/token`;
+    const redirectUri = `${process.env.FRONTEND_URL}/#/oneid-loading`;
+
+    console.log(`🔗 Token endpoint: ${tokenEndpoint}`);
+    console.log(`🔗 Redirect URI: ${redirectUri}`);
+    console.log(`📤 Requesting access token from OneID...`);
+
+    const response = await fetch(tokenEndpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -80,33 +122,59 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
         client_id: process.env.ONEID_CLIENT_ID,
         client_secret: process.env.ONEID_CLIENT_SECRET,
         code,
-        redirect_uri: `${process.env.FRONTEND_URL}/#/oneid-loading`,
+        redirect_uri: redirectUri,
       }),
     });
+
+    console.log(
+      `📥 Token response status: ${response.status} ${response.statusText}`
+    );
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ Token request failed");
+      console.error(`📄 Response body: ${errorText}`);
       return res.status(400).json({ message: "Error verifying user" });
     }
+
     const tokenData = await response.json();
+    console.log("✅ Token data received successfully");
+    console.log("📋 Token data keys:", Object.keys(tokenData));
+
     const { access_token, id_token } = tokenData;
 
     if (!access_token) {
+      console.error("❌ No access token received from OneID");
       throw new Error("No access token received from OneID");
+    }
+    console.log(
+      `✅ Access token received: ${access_token.substring(0, 20)}...`
+    );
+    if (id_token) {
+      console.log(`✅ ID token received: ${id_token.substring(0, 20)}...`);
     }
 
     // 3. Get user info using access token with FETCH
-    const userInfoResponse = await fetch(
-      `${process.env.ONEID_BASE_URL}/userinfo`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-          Accept: "application/json",
-        },
-      }
+    const userInfoEndpoint = `${process.env.ONEID_BASE_URL}/userinfo`;
+    console.log(`🔗 UserInfo endpoint: ${userInfoEndpoint}`);
+    console.log(`📤 Requesting user info from OneID...`);
+
+    const userInfoResponse = await fetch(userInfoEndpoint, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        Accept: "application/json",
+      },
+    });
+
+    console.log(
+      `📥 UserInfo response status: ${userInfoResponse.status} ${userInfoResponse.statusText}`
     );
 
     if (!userInfoResponse.ok) {
       const errorData = await userInfoResponse.json();
+      console.error("❌ UserInfo request failed");
+      console.error("📄 Error data:", errorData);
       throw new Error(
         `User info failed: ${userInfoResponse.status} ${
           errorData.error_description || "Unknown error"
@@ -115,8 +183,14 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
     }
 
     const verificationData = await userInfoResponse.json();
+    console.log("✅ Verification data received successfully");
+    console.log(
+      "📋 Verification data:",
+      JSON.stringify(verificationData, null, 2)
+    );
 
     // if (!verificationData.verified) {
+    //   console.log("❌ User not verified according to verification data");
     //   return res.status(400).json({ message: "User not verified" });
     // }
 
@@ -128,7 +202,8 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
       success: true,
     });
   } catch (error) {
-    console.error("Error verifying user:", error);
+    console.error("❌ Error verifying user:", error?.message || error);
+    console.error("📚 Full error stack:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 };
