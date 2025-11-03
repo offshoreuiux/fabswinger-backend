@@ -403,7 +403,7 @@ const addComment = async (req, res) => {
       parentCommentId: parentId || null,
     });
 
-    if (comment) {
+    if (comment && post.createdBy._id !== req.user.userId) {
       await NotificationService.createForumCommentNotification(
         req.user.userId,
         post.createdBy,

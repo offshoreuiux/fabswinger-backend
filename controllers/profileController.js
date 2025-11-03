@@ -11,6 +11,7 @@ const { sendMail } = require("../utils/transporter");
 const { generateProfileWinkEmail } = require("../utils/emailTemplates");
 const UserReview = require("../models/user/UserReviewScehema");
 const SubscriptionSchema = require("../models/payment/SubscriptionSchema");
+const PostWink = require("../models/post/PostWinkSchema");
 
 // Update user profile
 const updateProfile = async (req, res) => {
@@ -131,11 +132,27 @@ const getProfile = async (req, res) => {
     }
 
     // Sum of all winks received by this user
-    const winkAggregation = await Wink.aggregate([
+    const profileWinkAggregation = await Wink.aggregate([
       { $match: { winkedProfileId: new mongoose.Types.ObjectId(userId) } },
       { $group: { _id: null, total: { $sum: "$count" } } },
     ]);
-    const totalWinks = winkAggregation?.[0]?.total || 0;
+    // Count winks on posts created by this user
+    const postWinkAggregation = await PostWink.aggregate([
+      {
+        $lookup: {
+          from: "posts", // Collection name for Post model
+          localField: "postId",
+          foreignField: "_id",
+          as: "post",
+        },
+      },
+      { $unwind: "$post" },
+      { $match: { "post.userId": new mongoose.Types.ObjectId(userId) } },
+      { $count: "total" },
+    ]);
+    const totalProfileWinks = profileWinkAggregation?.[0]?.total || 0;
+    const totalPostWinks = postWinkAggregation?.[0]?.total || 0;
+    const totalWinks = totalProfileWinks + totalPostWinks;
 
     const reviews = await UserReview.find({ reviewedId: userId })
       .populate("reviewerId", "username profileImage gender")
@@ -718,11 +735,26 @@ const winkProfile = async ({ profileId, userId, io }) => {
     // Emit real-time wink count update to the winked user
     if (io) {
       // Get updated total wink count for the winked user
-      const winkAggregation = await Wink.aggregate([
+      const profileWinkAggregation = await Wink.aggregate([
         { $match: { winkedProfileId: new mongoose.Types.ObjectId(profileId) } },
         { $group: { _id: null, total: { $sum: "$count" } } },
       ]);
-      const totalWinks = winkAggregation?.[0]?.total || 0;
+      const postWinkAggregation = await PostWink.aggregate([
+        {
+          $lookup: {
+            from: "posts", // Collection name for Post model
+            localField: "postId",
+            foreignField: "_id",
+            as: "post",
+          },
+        },
+        { $unwind: "$post" },
+        { $match: { "post.userId": new mongoose.Types.ObjectId(profileId) } },
+        { $count: "total" },
+      ]);
+      const totalProfileWinks = profileWinkAggregation?.[0]?.total || 0;
+      const totalPostWinks = postWinkAggregation?.[0]?.total || 0;
+      const totalWinks = totalProfileWinks + totalPostWinks;
 
       io.to(`user-${profileId}`).emit("wink-count-update", {
         userId: profileId,

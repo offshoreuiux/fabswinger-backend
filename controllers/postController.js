@@ -10,6 +10,7 @@ const User = require("../models/user/UserSchema");
 const Friends = require("../models/FriendRequestSchema");
 const SubscriptionSchema = require("../models/payment/SubscriptionSchema");
 const { getIO } = require("../utils/socket");
+const Wink = require("../models/WinkSchema");
 
 const createPost = async (req, res) => {
   try {
@@ -113,7 +114,6 @@ const createPost = async (req, res) => {
       privacy,
       userId,
       location: parsedLocation,
-      isImage,
     });
 
     // Populate user details before sending response
@@ -121,7 +121,7 @@ const createPost = async (req, res) => {
       .populate("userId", "username profileImage nickname")
       .lean();
 
-    res.status(201).json({ post: populatedPost, activeButton });
+    res.status(201).json({ post: populatedPost, activeButton, isImage });
   } catch (error) {
     console.log("Error in createPost:", error);
     res.status(500).json({ error: error.message || "Internal server error" });
@@ -897,7 +897,7 @@ const unlikePost = async ({ postId, userId, io: socketIo }) => {
   }
 };
 
-const winkPost = async ({ postId, userId, io: socketIo }) => {
+const winkPost = async ({ postId, userId, io }) => {
   try {
     // Check if post exists
     const post = await Post.findById(postId);
@@ -925,6 +925,41 @@ const winkPost = async ({ postId, userId, io: socketIo }) => {
         post.userId,
         postId
       );
+
+      if (io) {
+        // Get updated total wink count for the winked user
+        const profileWinkAggregation = await Wink.aggregate([
+          {
+            $match: {
+              winkedProfileId: new mongoose.Types.ObjectId(post.userId),
+            },
+          },
+          { $group: { _id: null, total: { $sum: "$count" } } },
+        ]);
+        const postWinkAggregation = await PostWink.aggregate([
+          {
+            $lookup: {
+              from: "posts", // Collection name for Post model
+              localField: "postId",
+              foreignField: "_id",
+              as: "post",
+            },
+          },
+          { $unwind: "$post" },
+          {
+            $match: { "post.userId": new mongoose.Types.ObjectId(post.userId) },
+          },
+          { $count: "total" },
+        ]);
+        const totalProfileWinks = profileWinkAggregation?.[0]?.total || 0;
+        const totalPostWinks = postWinkAggregation?.[0]?.total || 0;
+        const totalWinks = totalProfileWinks + totalPostWinks;
+
+        io.to(`user-${post.userId}`).emit("wink-count-update", {
+          userId: post.userId,
+          winkCount: totalWinks,
+        });
+      }
     } catch (notificationError) {
       console.error(
         "Error creating post wink notification:",
@@ -955,7 +990,7 @@ const winkPost = async ({ postId, userId, io: socketIo }) => {
   }
 };
 
-const unwinkPost = async ({ postId, userId, io: socketIo }) => {
+const unwinkPost = async ({ postId, userId, io }) => {
   try {
     // Check if post exists
     const post = await Post.findById(postId);
@@ -973,15 +1008,36 @@ const unwinkPost = async ({ postId, userId, io: socketIo }) => {
     const winkCount = await PostWink.countDocuments({ postId });
 
     // Emit socket event for real-time updates
-    // const io = getIO();
-    // if (io) {
-    //   io.emit("post-unwinked", {
-    //     postId,
-    //     userId,
-    //     winkCount,
-    //     isWinked: false,
-    //   });
-    // }
+    if (io) {
+      // Get updated total wink count for the winked user
+      const profileWinkAggregation = await Wink.aggregate([
+        {
+          $match: { winkedProfileId: new mongoose.Types.ObjectId(post.userId) },
+        },
+        { $group: { _id: null, total: { $sum: "$count" } } },
+      ]);
+      const postWinkAggregation = await PostWink.aggregate([
+        {
+          $lookup: {
+            from: "posts", // Collection name for Post model
+            localField: "postId",
+            foreignField: "_id",
+            as: "post",
+          },
+        },
+        { $unwind: "$post" },
+        { $match: { "post.userId": new mongoose.Types.ObjectId(post.userId) } },
+        { $count: "total" },
+      ]);
+      const totalProfileWinks = profileWinkAggregation?.[0]?.total || 0;
+      const totalPostWinks = postWinkAggregation?.[0]?.total || 0;
+      const totalWinks = totalProfileWinks + totalPostWinks;
+
+      io.to(`user-${post.userId}`).emit("wink-count-update", {
+        userId: post.userId,
+        winkCount: totalWinks,
+      });
+    }
 
     return {
       message: "Post unwinked successfully",
