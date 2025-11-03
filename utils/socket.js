@@ -27,6 +27,20 @@ let updateTimer = null;
 let likeSpamProtection = new Map(); // userId -> { lastLikeTime, likeCount, pendingLikes }
 let pendingLikeUpdates = new Map(); // postId -> Set of pending like operations
 
+// Helper function to count only users with role "user"
+function getOnlineUserCount() {
+  let count = 0;
+  for (const [userId, userData] of onlineUsers) {
+    if (userData.role === "user") {
+      count++;
+    }
+  }
+  console.log(
+    `Online users with role "user": ${count} out of ${onlineUsers.size} total connections`
+  );
+  return count;
+}
+
 function initSocket(server) {
   io = new Server(server, {
     cors: {
@@ -57,23 +71,31 @@ function initSocket(server) {
         socket.userId = userId;
         socket.join(`user-${userId}`);
 
-        // Add to in-memory tracking
+        // Check user role before tracking online status
+        const user = await User.findById(userId).select("role").lean();
+
+        // Add to in-memory tracking with role cached
         onlineUsers.set(userId, {
           socketId: socket.id,
           joinedAt: Date.now(),
           lastActivity: Date.now(),
+          role: user?.role,
         });
 
-        // Queue database update instead of immediate write
-        queueUserUpdate(userId, { isOnline: true, lastSeen: new Date() });
+        // Queue database update only for users with role "user"
+        if (user && user.role === "user") {
+          queueUserUpdate(userId, { isOnline: true, lastSeen: new Date() });
+        }
 
         // Only emit to relevant users (friends, people in same rooms, etc.)
         emitToRelevantUsers("user-online", { userId });
 
-        // Emit online count update to all connected users
-        io.emit("online-count-update", { count: onlineUsers.size });
+        // Emit online count update to all connected users (only count users with role "user")
+        io.emit("online-count-update", { count: getOnlineUserCount() });
 
-        console.log(`User ${userId} joined their room`);
+        console.log(
+          `User ${userId} joined their room (role: ${user?.role || "unknown"})`
+        );
       } catch (error) {
         console.error("Error in join-user:", error);
       }
@@ -546,10 +568,12 @@ function initSocket(server) {
 
         if (userData) {
           userData.lastActivity = Date.now();
-        }
 
-        // Queue update instead of immediate database write
-        queueUserUpdate(userId, { lastSeen: new Date() });
+          // Queue update only for users with role "user" (using cached role)
+          if (userData.role === "user") {
+            queueUserUpdate(userId, { lastSeen: new Date() });
+          }
+        }
       } catch (error) {
         console.error("Error updating user activity:", error);
       }
@@ -709,19 +733,26 @@ function initSocket(server) {
       if (socket.userId) {
         const userId = socket.userId;
 
+        // Get user data before removing from tracking
+        const userData = onlineUsers.get(userId);
+
         // Remove from in-memory tracking
         onlineUsers.delete(userId);
 
-        // Queue offline status update
-        queueUserUpdate(userId, { isOnline: false, lastSeen: new Date() });
+        // Queue offline status update only for users with role "user" (using cached role)
+        if (userData && userData.role === "user") {
+          queueUserUpdate(userId, { isOnline: false, lastSeen: new Date() });
+        }
 
         // Emit to relevant users only
         emitToRelevantUsers("user-offline", { userId });
 
-        // Emit online count update to all connected users
-        io.emit("online-count-update", { count: onlineUsers.size });
+        // Emit online count update to all connected users (only count users with role "user")
+        io.emit("online-count-update", { count: getOnlineUserCount() });
 
-        console.log(`User ${userId} is now offline`);
+        console.log(
+          `User ${userId} is now offline (role: ${userData?.role || "unknown"})`
+        );
       }
     });
   });
@@ -840,15 +871,15 @@ async function cleanup() {
     await batchUpdateUsers();
     await processPendingLikeUpdates();
 
-    // Mark all online users as offline
+    // Mark all online users with role "user" as offline
     const onlineUserIds = Array.from(onlineUsers.keys());
     if (onlineUserIds.length > 0) {
       await User.updateMany(
-        { _id: { $in: onlineUserIds } },
+        { _id: { $in: onlineUserIds }, role: "user" },
         { $set: { isOnline: false, lastSeen: new Date() } }
       );
       console.log(
-        `Marked ${onlineUserIds.length} users as offline during cleanup`
+        `Marked online users with role "user" as offline during cleanup`
       );
     }
 
