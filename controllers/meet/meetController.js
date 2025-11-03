@@ -35,7 +35,7 @@ const createMeet = async (req, res) => {
     const now = new Date();
 
     // Filter active (upcoming) meets
-     const activeMeets = userMeets.filter((meet) => {
+    const activeMeets = userMeets.filter((meet) => {
       const meetDateTime = new Date(meet.date);
       if (meet.time) {
         const [hours, minutes] = meet.time.split(":").map(Number);
@@ -415,7 +415,14 @@ const updateMeet = async (req, res) => {
       return res.status(404).json({ message: "Meet not found" });
     }
 
-    res.status(200).json({ message: "Meet updated successfully", meet });
+    const updatedMeet = await Meet.findById(id).populate(
+      "userId",
+      "username profileImage"
+    );
+
+    res
+      .status(200)
+      .json({ message: "Meet updated successfully", meet: updatedMeet });
   } catch (error) {
     res
       .status(500)
