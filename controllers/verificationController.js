@@ -16,27 +16,24 @@ const startAgeOver18VerifyUser = async (req, res) => {
   console.log("📋 Request params:", req.params);
 
   try {
-    const { userId, email } = req.params;
-    console.log(`📝 Extracted userId: ${userId}, email: ${email}`);
+    const { email } = req.params;
+    console.log(`📝 Extracted email: ${email}`);
 
-    if (!userId || !email) {
-      console.log("❌ Missing userId or email");
-      return res.status(400).json({ message: "Missing userId or email" });
+    if (!email) {
+      console.log("❌ Missing email");
+      return res.status(400).json({ message: "Missing email" });
     }
 
     console.log(
-      `🔍 Searching for user with _id: ${userId} and email: ${decodeURIComponent(
-        email
-      )}`
+      `🔍 Searching for user with email: ${decodeURIComponent(email)}`
     );
     const user = await User.findOne({
-      _id: userId,
       email: decodeURIComponent(email),
     });
 
     if (!user) {
       console.log(
-        `❌ User not found for userId: ${userId}, email: ${decodeURIComponent(
+        `❌ User not found for userId: ${user._id}, email: ${decodeURIComponent(
           email
         )}`
       );
@@ -81,13 +78,15 @@ const startAgeOver18VerifyUser = async (req, res) => {
 
     console.log(`🌐 OneID Authorization URL generated: ${url}`);
     console.log(
-      `✅ Start Age Over 18 Verify User API successful for userId: ${userId}`
+      `✅ Start Age Over 18 Verify User API successful for email: ${decodeURIComponent(
+        email
+      )}`
     );
 
     // Redirect user to OneID
     return res.status(200).json({ redirectUrl: url });
   } catch (err) {
-    console.error("❌ startVerifyUser error:", err?.message || err);
+    console.error("❌ startAgeOver18VerifyUser error:", err?.message || err);
     console.error("📚 Full error stack:", err);
     return res.status(500).json({ message: "Internal server error" });
   }
@@ -113,15 +112,15 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
     // Validate required environment variables
     if (!process.env.ONEID_CLIENT_ID || !process.env.ONEID_CLIENT_SECRET) {
       console.error("❌ Missing OneID credentials in environment variables");
-      return res.status(500).json({ 
-        message: "OneID credentials not configured" 
+      return res.status(500).json({
+        message: "OneID credentials not configured",
       });
     }
 
     if (!process.env.ONEID_BASE_URL) {
       console.error("❌ Missing ONEID_BASE_URL in environment variables");
-      return res.status(500).json({ 
-        message: "OneID base URL not configured" 
+      return res.status(500).json({
+        message: "OneID base URL not configured",
       });
     }
 
@@ -158,19 +157,20 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
       const errorText = await response.text();
       console.error("❌ Token request failed");
       console.error(`📄 Response body: ${errorText}`);
-      
+
       // Try to parse the error response for more details
       let errorMessage = "Error verifying user";
       try {
         const errorData = JSON.parse(errorText);
-        errorMessage = errorData.error_description || errorData.error || errorMessage;
+        errorMessage =
+          errorData.error_description || errorData.error || errorMessage;
       } catch (e) {
         errorMessage = errorText || errorMessage;
       }
-      
-      return res.status(400).json({ 
+
+      return res.status(400).json({
         message: errorMessage,
-        details: errorText 
+        details: errorText,
       });
     }
 
