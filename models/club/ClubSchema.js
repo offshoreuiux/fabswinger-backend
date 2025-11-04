@@ -57,8 +57,13 @@ const clubSchema = new mongoose.Schema(
     },
     isVerified: {
       type: Boolean,
-      enum: [true, false, "pending"],
+      enum: [true, false],
       default: false,
+    },
+    verificationStatus: {
+      type: String,
+      enum: ["pending", "verified", "rejected", "applied"],
+      default: "pending",
     },
     image: {
       type: String,

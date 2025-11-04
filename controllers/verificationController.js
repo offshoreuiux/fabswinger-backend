@@ -398,7 +398,7 @@ const clubVerification = async (req, res) => {
     const newVerification = new Verification(verificationData);
     await newVerification.save();
 
-    club.isVerified = "pending";
+    club.verificationStatus = "applied";
     await club.save();
 
     // Send email notifications

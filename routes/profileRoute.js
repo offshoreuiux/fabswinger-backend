@@ -15,6 +15,7 @@ const {
   getOnlineUsers,
   createUserReview,
   getUserReviews,
+  hideProfile,
 } = require("../controllers/profileController");
 const upload = require("../middleware/upload");
 
@@ -52,5 +53,7 @@ router.get("/online-users", getOnlineUsers);
 router.get("/reviews/:userId", getUserReviews);
 
 router.post("/reviews", createUserReview);
+
+router.put("/hide", hideProfile);
 
 module.exports = router;

@@ -7,6 +7,7 @@ const {
   forgotPassword,
   verifyPasswordResetCode,
   resetPassword,
+  deleteAccount,
 } = require("../controllers/authController");
 const { authenticateToken } = require("../middleware");
 
@@ -16,5 +17,6 @@ router.get("/verify", authenticateToken, verifyToken);
 router.post("/forgot-password", forgotPassword);
 router.post("/verify-reset-code", verifyPasswordResetCode);
 router.post("/reset-password", resetPassword);
+router.delete("/delete-account", deleteAccount);
 
 module.exports = router;
