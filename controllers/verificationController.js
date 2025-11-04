@@ -62,7 +62,7 @@ const startAgeOver18VerifyUser = async (req, res) => {
     const state = `12345`;
     console.log(`🔐 Generated state: ${state}`);
 
-    const redirectUri = `${process.env.FRONTEND_URL}/#/oneid-loading`;
+    const redirectUri = `${process.env.FRONTEND_URL}/#/signup`;
     console.log(`🔗 Redirect URI: ${redirectUri}`);
 
     const url =
@@ -125,7 +125,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
     }
 
     const tokenEndpoint = `${process.env.ONEID_BASE_URL}/token`;
-    const redirectUri = `${process.env.FRONTEND_URL}/#/oneid-loading`;
+    const redirectUri = `${process.env.FRONTEND_URL}/#/signup`;
 
     console.log(`🔗 Token endpoint: ${tokenEndpoint}`);
     console.log(`🔗 Redirect URI: ${redirectUri}`);
