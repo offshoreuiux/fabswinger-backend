@@ -96,7 +96,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
   console.log("🚀 callbackAgeOver18VerifyUser - Callback received");
   console.log("📋 Request query params:", req.query);
 
-  const { code } = req.query;
+  const { code, userId } = req.query;
   console.log(
     `📝 Extracted authorization code: ${
       code ? code.substring(0, 20) + "..." : "N/A"
@@ -236,7 +236,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
     let user;
 
     if (verificationData.age_over_18) {
-      user = await User.findOne({ email: verificationData.email });
+      user = await User.findOneById(userId);
       if (user) {
         user.oneIdAgeOver18Verified = true;
         await user.save();
