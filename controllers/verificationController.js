@@ -102,7 +102,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
   try {
     const tokenEndpoint = `${process.env.ONEID_BASE_URL}/token`;
-    const redirectUri = `${process.env.FRONTEND_URL}/#/oneid-loading`;
+    const redirectUri = `${process.env.FRONTEND_URL}/#/`;
 
     console.log(`🔗 Token endpoint: ${tokenEndpoint}`);
     console.log(`🔗 Redirect URI: ${redirectUri}`);
@@ -112,17 +112,17 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
+        // Accept: "application/json",
         Authorization: `Basic ${Buffer.from(
           `${process.env.ONEID_CLIENT_ID}:${process.env.ONEID_CLIENT_SECRET}`
         ).toString("base64")}`,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
-        client_id: process.env.ONEID_CLIENT_ID,
-        client_secret: process.env.ONEID_CLIENT_SECRET,
+        // client_id: process.env.ONEID_CLIENT_ID,
+        // client_secret: process.env.ONEID_CLIENT_SECRET,
         code,
-        redirect_uri: redirectUri,
+        // redirect_uri: redirectUri,
       }),
     });
 
