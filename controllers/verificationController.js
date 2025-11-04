@@ -25,12 +25,21 @@ const startAgeOver18VerifyUser = async (req, res) => {
     }
 
     console.log(
-      `🔍 Searching for user with _id: ${userId} and email: ${email}`
+      `🔍 Searching for user with _id: ${userId} and email: ${decodeURIComponent(
+        email
+      )}`
     );
-    const user = await User.findOne({ _id: userId, email: email });
+    const user = await User.findOne({
+      _id: userId,
+      email: decodeURIComponent(email),
+    });
 
     if (!user) {
-      console.log(`❌ User not found for userId: ${userId}, email: ${email}`);
+      console.log(
+        `❌ User not found for userId: ${userId}, email: ${decodeURIComponent(
+          email
+        )}`
+      );
       return res.status(404).json({ message: "User not found" });
     }
     console.log(`✅ User found: ${user.username || user._id}`);
@@ -107,7 +116,6 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
     console.log(`🔗 Token endpoint: ${tokenEndpoint}`);
     console.log(`🔗 Redirect URI: ${redirectUri}`);
     console.log(`📤 Requesting access token from OneID...`);
-
 
     const response = await fetch(tokenEndpoint, {
       method: "POST",
