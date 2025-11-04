@@ -110,6 +110,21 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
   }
 
   try {
+    // Validate required environment variables
+    if (!process.env.ONEID_CLIENT_ID || !process.env.ONEID_CLIENT_SECRET) {
+      console.error("❌ Missing OneID credentials in environment variables");
+      return res.status(500).json({ 
+        message: "OneID credentials not configured" 
+      });
+    }
+
+    if (!process.env.ONEID_BASE_URL) {
+      console.error("❌ Missing ONEID_BASE_URL in environment variables");
+      return res.status(500).json({ 
+        message: "OneID base URL not configured" 
+      });
+    }
+
     const tokenEndpoint = `${process.env.ONEID_BASE_URL}/token`;
     const redirectUri = `${process.env.FRONTEND_URL}/#/oneid-loading`;
 
@@ -143,7 +158,20 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
       const errorText = await response.text();
       console.error("❌ Token request failed");
       console.error(`📄 Response body: ${errorText}`);
-      return res.status(400).json({ message: "Error verifying user" });
+      
+      // Try to parse the error response for more details
+      let errorMessage = "Error verifying user";
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error_description || errorData.error || errorMessage;
+      } catch (e) {
+        errorMessage = errorText || errorMessage;
+      }
+      
+      return res.status(400).json({ 
+        message: errorMessage,
+        details: errorText 
+      });
     }
 
     const tokenData = await response.json();
