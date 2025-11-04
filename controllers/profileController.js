@@ -458,8 +458,14 @@ const getProfileById = async (req, res) => {
 
     const user = await User.findById(id).select("-password -email");
 
-    if (!user || !user.settings.profileVisibility) {
+    if (!user) {
       return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!user.settings.profileVisibility && user.id !== loggedInUserId) {
+      return res
+        .status(404)
+        .json({ error: "User's profile is hidden", hidden: true });
     }
 
     // Check for pending friend requests between logged-in user and this profile
@@ -847,16 +853,42 @@ const createUserReview = async (req, res) => {
 const getUserReviews = async (req, res) => {
   try {
     const { userId } = req.params;
+    const currentUserId = req.user?.userId; // Get the current user making the request
+
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
     }
-    const userReviews = await UserReview.find({ reviewedId: userId })
-      .populate("reviewerId", "username profileImage")
-      .populate("reviewedId", "username profileImage")
+
+    const allReviews = await UserReview.find({ reviewedId: userId })
+      .populate("reviewerId", "username profileImage settings")
+      .populate("reviewedId", "username profileImage settings")
       .sort({ createdAt: -1 });
-    console.log("userReviews", userReviews);
+
+    // Filter out reviews from users with hidden profiles
+    const userReviews = allReviews.filter((review) => {
+      const reviewer = review.reviewerId;
+
+      // If reviewer doesn't exist or is deleted, exclude the review
+      if (!reviewer) {
+        return false;
+      }
+
+      // Allow current user to see their own reviews
+      if (currentUserId && reviewer._id.toString() === currentUserId) {
+        return true;
+      }
+
+      // Exclude reviews from users with hidden profiles
+      if (reviewer.settings?.profileVisibility === false) {
+        return false;
+      }
+
+      return true;
+    });
+
+    console.log("userReviews", userReviews.length);
     console.log(
-      `✅ Get User Reviews API successful for userId: ${userId} - returned ${userReviews.length} reviews`
+      `✅ Get User Reviews API successful for userId: ${userId} - returned ${userReviews.length} reviews (filtered from ${allReviews.length})`
     );
     res.status(200).json({ userReviews });
   } catch (error) {
@@ -864,6 +896,8 @@ const getUserReviews = async (req, res) => {
     res.status(500).json({ error: "Server error while fetching user reviews" });
   }
 };
+
+const hideProfile = async (req, res) => {};
 
 module.exports = {
   updateProfile,
@@ -880,4 +914,5 @@ module.exports = {
   getOnlineUsers,
   createUserReview,
   getUserReviews,
+  hideProfile,
 };

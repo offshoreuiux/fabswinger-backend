@@ -18,7 +18,7 @@ const getFriendList = async (req, res) => {
       $or: [{ sender: userId }, { receiver: userId }],
       status: { $nin: ["rejected", "blocked"] },
     })
-      .populate("sender receiver", "-password -email")
+      .populate("sender receiver", "-password")
       .skip(skip)
       .limit(parseInt(limit));
 
@@ -47,24 +47,54 @@ const getFriendList = async (req, res) => {
     }
 
     // Process the friend list to return the correct user info and status
-    const processedFriendList = friendList?.map((friendship) => {
-      // If I'm the sender, show the receiver; if I'm the receiver, show the sender
-      const isCurrentUserSender = friendship?.sender?._id.toString() === userId;
+    const processedFriendList = friendList
+      ?.map((friendship) => {
+        // If I'm the sender, show the receiver; if I'm the receiver, show the sender
+        const isCurrentUserSender =
+          friendship?.sender?._id.toString() === userId;
 
-      return {
-        ...(isCurrentUserSender
-          ? friendship?.receiver?.toObject() || {}
-          : friendship?.sender?.toObject() || {}),
-        status: friendship?.status,
-        isMutualFriend: false, // For current user's friends, this is always false
-      };
-    });
+        const friendUser = isCurrentUserSender
+          ? friendship?.receiver
+          : friendship?.sender;
+
+        // Filter out users with hidden profiles
+        if (
+          friendUser?.settings?.profileVisibility === false &&
+          friendUser?._id.toString() !== userId
+        ) {
+          return null;
+        }
+
+        return {
+          ...(friendUser?.toObject() || {}),
+          status: friendship?.status,
+          isMutualFriend: false, // For current user's friends, this is always false
+        };
+      })
+      .filter((friend) => friend !== null); // Remove null entries
 
     // For total count, we need to get all friends and then filter if search is provided
     let allFriends = await Friends.find({
       $or: [{ sender: userId }, { receiver: userId }],
       status: { $nin: ["rejected", "blocked"] },
-    }).populate("sender receiver", "-password -email");
+    }).populate("sender receiver", "-password");
+
+    // Filter out hidden profiles from allFriends
+    allFriends = allFriends.filter((friendship) => {
+      const isCurrentUserSender = friendship?.sender?._id.toString() === userId;
+      const friendUser = isCurrentUserSender
+        ? friendship?.receiver
+        : friendship?.sender;
+
+      // Exclude hidden profiles
+      if (
+        friendUser?.settings?.profileVisibility === false &&
+        friendUser?._id.toString() !== userId
+      ) {
+        return false;
+      }
+      return true;
+    });
 
     // If search is provided, filter the results for count
     if (search && search.trim() !== "") {
@@ -552,7 +582,7 @@ const getOtherUserFriendList = async (req, res) => {
       $or: [{ sender: userId }, { receiver: userId }],
       status: { $nin: ["rejected", "blocked"] },
     })
-      .populate("sender receiver", "-password -email")
+      .populate("sender receiver", "-password")
       .skip(skip)
       .limit(parseInt(limit));
 
@@ -573,29 +603,59 @@ const getOtherUserFriendList = async (req, res) => {
     });
 
     // Process the friend list to return the correct user info and status
-    const friendsWithMutualStatus = otherUserFriends.map((friendship) => {
-      // If the target user is the sender, show the receiver; if the target user is the receiver, show the sender
+    const friendsWithMutualStatus = otherUserFriends
+      .map((friendship) => {
+        // If the target user is the sender, show the receiver; if the target user is the receiver, show the sender
+        const isTargetUserSender = friendship.sender._id.toString() === userId;
+        const friendUser = isTargetUserSender
+          ? friendship.receiver
+          : friendship.sender;
+        const friendId = friendUser._id.toString();
+
+        // Filter out users with hidden profiles (unless it's the current user viewing their own profile)
+        if (
+          friendUser?.settings?.profileVisibility === false &&
+          friendId !== currentUserId
+        ) {
+          return null;
+        }
+
+        const mutualStatusWithCurrentUser =
+          currentUserFriendStatusByUserId.get(friendId) || null;
+
+        return {
+          ...friendUser.toObject(),
+          status: friendship.status,
+          mutualFriendStatus: mutualStatusWithCurrentUser || "not_mutual",
+        };
+      })
+      .filter((friend) => friend !== null); // Remove null entries
+
+    // Get total count for pagination (need to filter hidden profiles)
+    const allOtherUserFriends = await Friends.find({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: { $nin: ["rejected", "blocked"] },
+    }).populate("sender receiver", "-password");
+
+    // Filter out hidden profiles for accurate count
+    const visibleFriends = allOtherUserFriends.filter((friendship) => {
       const isTargetUserSender = friendship.sender._id.toString() === userId;
       const friendUser = isTargetUserSender
         ? friendship.receiver
         : friendship.sender;
       const friendId = friendUser._id.toString();
 
-      const mutualStatusWithCurrentUser =
-        currentUserFriendStatusByUserId.get(friendId) || null;
-
-      return {
-        ...friendUser.toObject(),
-        status: friendship.status,
-        mutualFriendStatus: mutualStatusWithCurrentUser || "not_mutual",
-      };
+      // Exclude hidden profiles
+      if (
+        friendUser?.settings?.profileVisibility === false &&
+        friendId !== currentUserId
+      ) {
+        return false;
+      }
+      return true;
     });
 
-    // Get total count for pagination
-    const total = await Friends.countDocuments({
-      $or: [{ sender: userId }, { receiver: userId }],
-      status: { $nin: ["rejected", "blocked"] },
-    });
+    const total = visibleFriends.length;
 
     console.log(
       `✅ Get Other User Friend List API successful - userId: ${userId} viewed by currentUser: ${currentUserId}`

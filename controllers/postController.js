@@ -583,7 +583,28 @@ const getPosts = async (req, res) => {
                 nickname: 1,
                 profileImage: 1,
                 verified: 1,
+                settings: 1,
               },
+            },
+          ],
+        },
+      },
+      // Filter out posts from users with hidden profiles
+      {
+        $addFields: {
+          userInfoFirst: { $arrayElemAt: ["$userInfo", 0] },
+        },
+      },
+      {
+        $match: {
+          $or: [
+            // Show user's own posts
+            { userId: currentUserIdObj },
+            // Show posts from visible profiles
+            { "userInfoFirst.settings.profileVisibility": { $ne: false } },
+            // Show posts where profileVisibility doesn't exist (old records)
+            {
+              "userInfoFirst.settings.profileVisibility": { $exists: false },
             },
           ],
         },
@@ -704,7 +725,7 @@ const getPosts = async (req, res) => {
       },
       {
         $addFields: {
-          userId: { $arrayElemAt: ["$userInfo", 0] },
+          userId: "$userInfoFirst",
           likes: { $size: "$likes" },
           isLiked: { $gt: [{ $size: "$userLike" }, 0] },
           isWinked: { $gt: [{ $size: "$userWink" }, 0] },
@@ -715,6 +736,7 @@ const getPosts = async (req, res) => {
       {
         $project: {
           userInfo: 0,
+          userInfoFirst: 0,
           userLike: 0,
           userWink: 0,
           userHotlist: 0,
@@ -1146,6 +1168,13 @@ const getPostsByUserId = async (req, res) => {
     const { userId } = req.params;
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
+    }
+    const user = await User.findById(userId).select("-password -email");
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    if (!user.settings.profileVisibility && user.id !== req.user.userId) {
+      return res.status(404).json({ error: "User's profile is hidden" });
     }
     const posts = await Post.find({ userId }).lean();
     // Separate media by inferring type from file extension in image URLs

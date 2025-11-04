@@ -1104,20 +1104,53 @@ class NotificationService {
         }
       }
 
-      const notifications = await Notification.find(query)
-        .populate("sender", "nickname profileImage")
+      const allNotifications = await Notification.find(query)
+        .populate("sender", "nickname profileImage settings")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit);
 
-      const total = await Notification.countDocuments(query);
+      // Filter out notifications from users with hidden profiles
+      const notifications = allNotifications.filter((notification) => {
+        const sender = notification.sender;
+
+        // If sender doesn't exist (deleted user), exclude notification
+        if (!sender) {
+          return false;
+        }
+
+        // Allow notifications from the user themselves
+        if (sender._id.toString() === userId.toString()) {
+          return true;
+        }
+
+        // Exclude notifications from users with hidden profiles
+        if (sender.settings?.profileVisibility === false) {
+          return false;
+        }
+
+        return true;
+      });
+
+      // Get total count excluding hidden profiles
+      const allNotificationsForCount = await Notification.find(query)
+        .populate("sender", "settings")
+        .lean();
+
+      const filteredCount = allNotificationsForCount.filter((notification) => {
+        const sender = notification.sender;
+        if (!sender) return false;
+        if (sender._id.toString() === userId.toString()) return true;
+        if (sender.settings?.profileVisibility === false) return false;
+        return true;
+      }).length;
 
       return {
         notifications,
-        total,
+        total: filteredCount,
         page,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page < Math.ceil(total / limit),
+        totalPages: Math.ceil(filteredCount / limit),
+        hasMore: page < Math.ceil(filteredCount / limit),
       };
     } catch (error) {
       console.error("Error getting user notifications:", error);
@@ -1186,19 +1219,37 @@ class NotificationService {
       const counts = {};
 
       for (const filter of filters) {
+        let notifications;
+        
         if (filter === "All") {
-          counts[filter] = await Notification.countDocuments(baseQuery);
+          notifications = await Notification.find(baseQuery)
+            .populate("sender", "settings")
+            .lean();
         } else {
           const typeFilter = this.getNotificationTypesForFilter(filter);
           if (typeFilter && typeFilter.length > 0) {
-            counts[filter] = await Notification.countDocuments({
+            notifications = await Notification.find({
               ...baseQuery,
               type: { $in: typeFilter },
-            });
+            })
+              .populate("sender", "settings")
+              .lean();
           } else {
             counts[filter] = 0;
+            continue;
           }
         }
+
+        // Filter out notifications from hidden profiles
+        const visibleNotifications = notifications.filter((notification) => {
+          const sender = notification.sender;
+          if (!sender) return false;
+          if (sender._id.toString() === userId.toString()) return true;
+          if (sender.settings?.profileVisibility === false) return false;
+          return true;
+        });
+
+        counts[filter] = visibleNotifications.length;
       }
 
       return counts;
@@ -1287,13 +1338,37 @@ class NotificationService {
   // Get unread notification count
   static async getUnreadCount(userId) {
     try {
-      const count = await Notification.countDocuments({
+      const unreadNotifications = await Notification.find({
         recipient: userId,
         isRead: false,
         isDeleted: false,
-      });
+      }).populate("sender", "settings");
 
-      return count;
+      // Filter out notifications from users with hidden profiles
+      const visibleUnreadNotifications = unreadNotifications.filter(
+        (notification) => {
+          const sender = notification.sender;
+
+          // If sender doesn't exist, exclude
+          if (!sender) {
+            return false;
+          }
+
+          // Include user's own notifications
+          if (sender._id.toString() === userId.toString()) {
+            return true;
+          }
+
+          // Exclude hidden profiles
+          if (sender.settings?.profileVisibility === false) {
+            return false;
+          }
+
+          return true;
+        }
+      );
+
+      return visibleUnreadNotifications.length;
     } catch (error) {
       console.error("Error getting unread count:", error);
       throw error;

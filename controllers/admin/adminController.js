@@ -142,6 +142,9 @@ const verifyVerification = async (req, res) => {
 
     // Update verification status
     entity.isVerified = status === "verified";
+    if(verification.type === "club") {
+      entity.verificationStatus = status;
+    }
     await entity.save();
 
     verification.status = status;
