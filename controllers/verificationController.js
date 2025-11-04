@@ -233,13 +233,14 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
     console.log(`✅ Callback Age Over 18 Verify User API successful`);
 
+    let user;
+
     if (verificationData.age_over_18) {
-      const user = await User.findOne({ email: verificationData.email });
+      user = await User.findOne({ email: verificationData.email });
       if (user) {
         user.oneIdAgeOver18Verified = true;
         await user.save();
       }
-      await user.save();
     }
 
     return res.status(200).json({
