@@ -102,11 +102,12 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
   try {
     const tokenEndpoint = `${process.env.ONEID_BASE_URL}/token`;
-    const redirectUri = `${process.env.FRONTEND_URL}/#/`;
+    const redirectUri = `${process.env.FRONTEND_URL}/#/oneid-loading`;
 
     console.log(`🔗 Token endpoint: ${tokenEndpoint}`);
     console.log(`🔗 Redirect URI: ${redirectUri}`);
     console.log(`📤 Requesting access token from OneID...`);
+
 
     const response = await fetch(tokenEndpoint, {
       method: "POST",
@@ -122,7 +123,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
         // client_id: process.env.ONEID_CLIENT_ID,
         // client_secret: process.env.ONEID_CLIENT_SECRET,
         code,
-        // redirect_uri: redirectUri,
+        redirect_uri: redirectUri,
       }),
     });
 
