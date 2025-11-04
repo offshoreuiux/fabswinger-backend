@@ -284,6 +284,10 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    oneIdAgeOver18Verified: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true, // auto add createdAt and updatedAt

@@ -8,7 +8,7 @@ const {
 const router = express.Router();
 const upload = require("../middleware/upload");
 
-router.get("/start/:userId/:email", startAgeOver18VerifyUser);
+router.get("/start/:email", startAgeOver18VerifyUser);
 
 router.get("/callback", callbackAgeOver18VerifyUser);
 
