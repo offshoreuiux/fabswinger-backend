@@ -96,7 +96,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
   console.log("🚀 callbackAgeOver18VerifyUser - Callback received");
   console.log("📋 Request query params:", req.query);
 
-  const { code } = req.query;
+  const { code, userId } = req.query;
   console.log(
     `📝 Extracted authorization code: ${
       code ? code.substring(0, 20) + "..." : "N/A"
@@ -105,6 +105,20 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
   if (!code) {
     console.log("❌ Missing authorization code");
+
+    // Delete user if verification fails and oneIdAgeOver18Verified is false
+    if (userId) {
+      try {
+        const user = await User.findById(userId);
+        if (user && !user.oneIdAgeOver18Verified) {
+          await user.deleteOne();
+          console.log("🗑️ User deleted due to missing authorization code");
+        }
+      } catch (deleteError) {
+        console.error("❌ Error deleting user:", deleteError);
+      }
+    }
+
     return res.status(400).json({ message: "Missing code or state" });
   }
 
@@ -112,6 +126,20 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
     // Validate required environment variables
     if (!process.env.ONEID_CLIENT_ID || !process.env.ONEID_CLIENT_SECRET) {
       console.error("❌ Missing OneID credentials in environment variables");
+
+      // Delete user if verification fails and oneIdAgeOver18Verified is false
+      if (userId) {
+        try {
+          const user = await User.findById(userId);
+          if (user && !user.oneIdAgeOver18Verified) {
+            await user.deleteOne();
+            console.log("🗑️ User deleted due to missing OneID credentials");
+          }
+        } catch (deleteError) {
+          console.error("❌ Error deleting user:", deleteError);
+        }
+      }
+
       return res.status(500).json({
         message: "OneID credentials not configured",
       });
@@ -119,6 +147,20 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
     if (!process.env.ONEID_BASE_URL) {
       console.error("❌ Missing ONEID_BASE_URL in environment variables");
+
+      // Delete user if verification fails and oneIdAgeOver18Verified is false
+      if (userId) {
+        try {
+          const user = await User.findById(userId);
+          if (user && !user.oneIdAgeOver18Verified) {
+            await user.deleteOne();
+            console.log("🗑️ User deleted due to missing OneID base URL");
+          }
+        } catch (deleteError) {
+          console.error("❌ Error deleting user:", deleteError);
+        }
+      }
+
       return res.status(500).json({
         message: "OneID base URL not configured",
       });
@@ -166,6 +208,19 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
           errorData.error_description || errorData.error || errorMessage;
       } catch (e) {
         errorMessage = errorText || errorMessage;
+      }
+
+      // Delete user if verification fails and oneIdAgeOver18Verified is false
+      if (userId) {
+        try {
+          const user = await User.findById(userId);
+          if (user && !user.oneIdAgeOver18Verified) {
+            await user.deleteOne();
+            console.log("🗑️ User deleted due to token request failure");
+          }
+        } catch (deleteError) {
+          console.error("❌ Error deleting user:", deleteError);
+        }
       }
 
       return res.status(400).json({
@@ -233,14 +288,43 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
     console.log(`✅ Callback Age Over 18 Verify User API successful`);
 
+    let user = await User.findById(userId);
+
+    if (verificationData.age_over_18) {
+      if (user) {
+        user.oneIdAgeOver18Verified = true;
+        await user.save();
+      }
+    } else {
+      if (user) {
+        await user.deleteOne();
+        console.log("🗑️ User deleted - not age over 18");
+      }
+    }
+
     return res.status(200).json({
       message: "User age over 18 verified successfully",
       verificationData,
       success: true,
+      user,
     });
   } catch (error) {
     console.error("❌ Error verifying user:", error?.message || error);
     console.error("📚 Full error stack:", error);
+
+    // Delete user if verification fails and oneIdAgeOver18Verified is false
+    if (userId) {
+      try {
+        const user = await User.findById(userId);
+        if (user && !user.oneIdAgeOver18Verified) {
+          await user.deleteOne();
+          console.log("🗑️ User deleted due to verification error");
+        }
+      } catch (deleteError) {
+        console.error("❌ Error deleting user:", deleteError);
+      }
+    }
+
     return res.status(500).json({ message: "Internal server error" });
   }
 };
