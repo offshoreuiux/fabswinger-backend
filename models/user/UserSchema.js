@@ -192,7 +192,7 @@ const userSchema = new mongoose.Schema(
       },
       max: {
         type: Number,
-        default: 65,
+        default: 55,
       },
     },
     preferences: {
