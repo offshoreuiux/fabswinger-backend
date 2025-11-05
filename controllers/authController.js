@@ -263,12 +263,12 @@ const login = async (req, res) => {
       }
     }
 
-    if (!user.oneIdAgeOver18Verified) {
-      return res.status(400).json({
-        error: "You are not verified yet, please verify your age",
-        success: false,
-      });
-    }
+    // if (!user.oneIdAgeOver18Verified) {
+    //   return res.status(400).json({
+    //     error: "You are not verified yet, please verify your age",
+    //     success: false,
+    //   });
+    // }
 
     const isMatch = await bcrypt.compare(password, user.password);
 
