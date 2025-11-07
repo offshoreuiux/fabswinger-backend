@@ -79,6 +79,8 @@ const signup = async (req, res) => {
       password,
       keepSignedIn,
       geoLocation,
+      gender,
+      dateOfBirth,
       recaptchaToken,
       affiliateCode,
     } = req.body;
@@ -118,6 +120,8 @@ const signup = async (req, res) => {
       email,
       password: hashedPassword,
       keepSignedIn: keepSignedIn || false,
+      gender,
+      dateOfBirth,
       geoLocation,
       affiliateOf: affiliateCode,
     });
@@ -189,6 +193,8 @@ const signup = async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         isVerified: newUser.isVerified,
+        gender:newUser.gender,
+        dateOfBirth:newUser.dateOfBirth,
       },
     });
   } catch (error) {

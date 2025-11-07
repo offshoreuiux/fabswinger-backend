@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const partnerSchema = require("./PartnerSchema");
 
 // Define schema
 const userSchema = new mongoose.Schema(
@@ -17,7 +18,7 @@ const userSchema = new mongoose.Schema(
     stripeAccountId: {
       type: String,
       default: null,
-      required: false,
+      required: false, 
     },
     affiliateOf: {
       type: String,
@@ -82,6 +83,10 @@ const userSchema = new mongoose.Schema(
         "other",
         "preferNotToSay",
       ],
+    },
+    partner: {
+      type: partnerSchema,
+      default: {},
     },
     sexuality: {
       type: String,
