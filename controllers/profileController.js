@@ -147,7 +147,7 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    // ✅ Validate profile completion
+    // Validate profile completion
     if (updateData.profileCompleted === true) {
       const requiredFields = ["nickname", "gender", "dateOfBirth"];
       const missingFields = requiredFields.filter(
@@ -162,8 +162,6 @@ const updateProfile = async (req, res) => {
 
     updateData.updatedAt = new Date();
 
-    // 🧠 IMPORTANT FIX:
-    // Use $set with full object paths so partner fields save properly
     const setData = {};
 
     Object.entries(updateData).forEach(([key, value]) => {
@@ -177,7 +175,6 @@ const updateProfile = async (req, res) => {
       }
     });
 
-    // 🧾 Update with $set (deep merge)
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       { $set: setData },
@@ -188,7 +185,7 @@ const updateProfile = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    console.log(`✅ Update Profile API successful for userId: ${userId}`);
+    console.log(` Update Profile API successful for userId: ${userId}`);
     res.json({
       message: "Profile updated successfully",
       user: updatedUser,
@@ -227,7 +224,7 @@ const updatePassword = async (req, res) => {
     user.password = hashedPassword;
     await user.save();
 
-    console.log(`✅ Update Password API successful for userId: ${userId}`);
+    console.log(` Update Password API successful for userId: ${userId}`);
 
     res.json({ message: "Password updated successfully" });
   } catch (error) {
