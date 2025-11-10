@@ -480,8 +480,6 @@ const getProfiles = async (req, res) => {
       }
     }
 
-    // Only show profiles where profileVisibility is true
-    query["settings.profileVisibility"] = true;
     query.role = "user";
 
     // Get total count for pagination info
@@ -576,12 +574,6 @@ const getProfileById = async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
-    }
-
-    if (!user.settings.profileVisibility && user.id !== loggedInUserId) {
-      return res
-        .status(404)
-        .json({ error: "User's profile is hidden", hidden: true });
     }
 
     // Check for pending friend requests between logged-in user and this profile
@@ -969,7 +961,6 @@ const createUserReview = async (req, res) => {
 const getUserReviews = async (req, res) => {
   try {
     const { userId } = req.params;
-    const currentUserId = req.user?.userId; // Get the current user making the request
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
@@ -980,27 +971,8 @@ const getUserReviews = async (req, res) => {
       .populate("reviewedId", "username profileImage settings")
       .sort({ createdAt: -1 });
 
-    // Filter out reviews from users with hidden profiles
-    const userReviews = allReviews.filter((review) => {
-      const reviewer = review.reviewerId;
-
-      // If reviewer doesn't exist or is deleted, exclude the review
-      if (!reviewer) {
-        return false;
-      }
-
-      // Allow current user to see their own reviews
-      if (currentUserId && reviewer._id.toString() === currentUserId) {
-        return true;
-      }
-
-      // Exclude reviews from users with hidden profiles
-      if (reviewer.settings?.profileVisibility === false) {
-        return false;
-      }
-
-      return true;
-    });
+    // Filter out reviews where reviewer record no longer exists
+    const userReviews = allReviews.filter((review) => !!review.reviewerId);
 
     console.log("userReviews", userReviews.length);
     console.log(

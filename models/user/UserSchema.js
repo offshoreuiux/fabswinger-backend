@@ -18,7 +18,7 @@ const userSchema = new mongoose.Schema(
     stripeAccountId: {
       type: String,
       default: null,
-      required: false, 
+      required: false,
     },
     affiliateOf: {
       type: String,
@@ -273,7 +273,7 @@ const userSchema = new mongoose.Schema(
         getFriendInvites: true,
         newMembersMatchMyRequirements: true,
         profileVisibility: true,
-        // whosLookedAtMe: true,
+        whosLookedAtMe: true,
         friendsListVisibility: true,
         photoFabFeature: true,
         nonMemberVisibility: true,

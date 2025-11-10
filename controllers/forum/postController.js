@@ -141,27 +141,21 @@ const getPosts = async (req, res) => {
     .populate("channelId", "name image")
     .populate("createdBy", "username profileImage settings");
 
-  const visiblePosts = posts.filter((post) => {
-    const settings = post?.createdBy?.settings;
-    // Keep if profileVisibility is not explicitly false or doesn't exist
-    return settings?.profileVisibility !== false;
-  });
-
   const isLiked = await Like.find({
-    postId: visiblePosts.map((each) => each._id),
+    postId: posts.map((each) => each._id),
     userId: req.user.userId,
   }).select("postId");
 
   const likes = await Like.find({
-    postId: visiblePosts.map((each) => each._id),
+    postId: posts.map((each) => each._id),
   });
 
   const comments = await Comment.find({
-    postId: visiblePosts.map((each) => each._id),
+    postId: posts.map((each) => each._id),
   });
 
   const isMember = await Member.find({
-    channelId: visiblePosts.map((each) => each.channelId),
+    channelId: posts.map((each) => each.channelId),
     userId: req.user.userId,
   });
 

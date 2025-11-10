@@ -31,6 +31,15 @@ const trackProfileView = async (req, res) => {
       return res.status(404).json({ message: "Profile not found" });
     }
 
+    const user = await User.findById(viewerId).select("settings");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.settings.whosLookedAtMe) {
+      return;
+    }
+
     // Create profile view record
     const profileView = new ProfileView({
       profileOwner: profileId,

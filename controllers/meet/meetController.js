@@ -307,21 +307,6 @@ const getMeets = async (req, res) => {
           .sort({ createdAt: -1 });
         break;
     }
-    
-    //Added code to filter meets based on creator's profile visibility setting
-    const creatorIds = [...new Set(meets.map(m => m.userId?._id?.toString()).filter(Boolean))];
-    const creators = await User.find({ _id: { $in: creatorIds } }).select("profileVisibility");
-    const visibilityMap = Object.fromEntries(
-      creators.map(u => [u._id.toString(), u.profileVisibility])
-    );
-
-    const visibleMeets = meets.filter(meet => {
-      const creatorId = meet.userId?._id?.toString();
-      const isVisible = visibilityMap[creatorId] !== false;
-      return isVisible;
-    });
-    //added code ends here
-
     // Add hotlist information to events
     const meetsWithHotlistInfo = await addHotlistInfoToMeets(meets, userId);
     const meetsWithParticipantDetails = await addParticipantDetailsToMeets(

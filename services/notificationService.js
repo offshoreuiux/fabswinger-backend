@@ -1125,11 +1125,6 @@ class NotificationService {
           return true;
         }
 
-        // Exclude notifications from users with hidden profiles
-        if (sender.settings?.profileVisibility === false) {
-          return false;
-        }
-
         return true;
       });
 
@@ -1142,7 +1137,6 @@ class NotificationService {
         const sender = notification.sender;
         if (!sender) return false;
         if (sender._id.toString() === userId.toString()) return true;
-        if (sender.settings?.profileVisibility === false) return false;
         return true;
       }).length;
 
@@ -1246,7 +1240,6 @@ class NotificationService {
           const sender = notification.sender;
           if (!sender) return false;
           if (sender._id.toString() === userId.toString()) return true;
-          if (sender.settings?.profileVisibility === false) return false;
           return true;
         });
 
@@ -1358,11 +1351,6 @@ class NotificationService {
           // Include user's own notifications
           if (sender._id.toString() === userId.toString()) {
             return true;
-          }
-
-          // Exclude hidden profiles
-          if (sender.settings?.profileVisibility === false) {
-            return false;
           }
 
           return true;
