@@ -193,8 +193,8 @@ const signup = async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         isVerified: newUser.isVerified,
-        gender:newUser.gender,
-        dateOfBirth:newUser.dateOfBirth,
+        gender: newUser.gender,
+        dateOfBirth: newUser.dateOfBirth,
       },
     });
   } catch (error) {
@@ -236,6 +236,11 @@ const login = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Invalid username/email or password" });
+    }
+
+    // Block login for deactivated users
+    if (user.isActive === false) {
+      return res.status(403).json({ error: "Account is deactivated" });
     }
 
     if (!user.isVerified && user.role != "admin") {
@@ -282,11 +287,6 @@ const login = async (req, res) => {
       return res
         .status(400)
         .json({ error: "Invalid username/email or password" });
-    }
-
-    // Block login for deactivated users
-    if (user.isActive === false) {
-      return res.status(403).json({ error: "Account is deactivated" });
     }
 
     // Use user's keepSignedIn preference if not explicitly provided in login

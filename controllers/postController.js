@@ -1160,6 +1160,7 @@ const unhotlistPost = async (req, res) => {
 const getPostsByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
+    const currentUserId = req.user.userId;
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
     }
@@ -1168,7 +1169,13 @@ const getPostsByUserId = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const posts = await Post.find({ userId }).lean();
+    const query = { userId };
+
+    if (currentUserId !== userId) {
+      query.privacy = "public";
+    }
+
+    const posts = await Post.find(query).lean();
     // Separate media by inferring type from file extension in image URLs
     // Treat common video extensions as videos; everything else stays as images
     const videoExtensions = [

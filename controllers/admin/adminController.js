@@ -142,7 +142,7 @@ const verifyVerification = async (req, res) => {
 
     // Update verification status
     entity.isVerified = status === "verified";
-    if(verification.type === "club") {
+    if (verification.type === "club") {
       entity.verificationStatus = status;
     }
     await entity.save();
@@ -185,12 +185,16 @@ const verifyVerification = async (req, res) => {
       `✅ Verify Verification API successful - ${entityType} ${status} for verificationId: ${verificationId}`
     );
 
+    const data = await Verification.findById(verificationId)
+      .populate("userId", "username email profileImage isVerified")
+      .populate("clubId", "name email contactEmail isVerified image");
+
     res.json({
       message:
         status === "verified"
           ? `${entityType === "user" ? "User" : "Club"} verified successfully`
           : `${entityType === "user" ? "User" : "Club"} rejected successfully`,
-      verification,
+      verification: data,
     });
   } catch (err) {
     res.status(500).json({ error: "Failed to verify verification" });

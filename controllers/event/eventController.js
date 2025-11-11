@@ -87,7 +87,7 @@ const addParticipantDetailsToEvent = async (event, userId) => {
     const participants = await EventParticipant.find({
       eventId: event._id,
       // status: "approved",
-    }).populate("userId", "username profilePicture firstName lastName people");
+    }).populate("userId", "username profileImage firstName lastName people");
     event.participants = participants;
     return event;
   } catch (error) {
@@ -1271,12 +1271,14 @@ const getEventById = async (req, res) => {
       "username profilePicture firstName lastName people"
     );
     const participants = await EventParticipant.find({ eventId: id });
+    // console.log("participants", participants);
     event.participants = participants;
     const eventWithHotlistInfo = await addHotlistInfoToEvent(event, userId);
     const eventWithParticipantDetails = await addParticipantDetailsToEvent(
       eventWithHotlistInfo,
       userId
     );
+    console.log("eventWithParticipantDetails", eventWithParticipantDetails);
     res.status(200).json({ event: eventWithParticipantDetails });
   } catch (error) {
     res

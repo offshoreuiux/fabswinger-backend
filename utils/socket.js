@@ -74,6 +74,11 @@ function initSocket(server) {
         // Check user role before tracking online status
         const user = await User.findById(userId).select("role").lean();
 
+        if (!user?.isVerified || !user?.oneIdAgeOver18Verified) {
+          socket.disconnect();
+          return;
+        }
+
         // Add to in-memory tracking with role cached
         onlineUsers.set(userId, {
           socketId: socket.id,
