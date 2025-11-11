@@ -74,8 +74,8 @@ const userSchema = new mongoose.Schema(
     gender: {
       type: String,
       enum: [
-        "man",
-        "woman",
+        "male",
+        "female",
         "coupleMF",
         "coupleMM",
         "coupleFF",
