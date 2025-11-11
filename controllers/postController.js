@@ -598,8 +598,10 @@ const getPosts = async (req, res) => {
       {
         $match: {
           $or: [
-            // Show user's own posts
             { userId: currentUserIdObj },
+            { "userInfoFirst.settings.profileVisibility": { $ne: false } },
+            { "userInfoFirst.settings": { $exists: false } },
+            { "userInfoFirst.settings.profileVisibility": { $exists: false } },
           ],
         },
       },

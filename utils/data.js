@@ -103,7 +103,7 @@ const countries = [
   { value: "IR", label: "Iran, Islamic Republic of" },
   { value: "IQ", label: "Iraq" },
   { value: "IE", label: "Ireland" },
-  { value: "IM", label: "Isle of Man" },
+  { value: "IM", label: "Isle of Male" },
   { value: "IL", label: "Israel" },
   { value: "IT", label: "Italy" },
   { value: "JM", label: "Jamaica" },

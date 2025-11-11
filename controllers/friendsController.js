@@ -427,7 +427,7 @@ const acceptFriendRequest = async (req, res) => {
       if (originalNotification) {
         await NotificationService.updateFriendRequestNotificationStatus(
           originalNotification._id,
-          "accepted",
+          "friend_request_accepted",
           friendId
         );
         console.log("originalNotification", originalNotification);

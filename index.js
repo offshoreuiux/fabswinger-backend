@@ -96,6 +96,7 @@ app.use("/api/profile-view", profileViewRoutes);
         password: hashed,
         role: "admin",
         isVerified: true,
+        oneIdAgeOver18Verified: true,
         geoLocation: { type: "Point", coordinates: [0, 0] },
       });
       await admin.save();
@@ -146,7 +147,7 @@ const scheduleDailyDigest = async () => {
               $in:
                 user.lookingFor && user.lookingFor.length
                   ? user.lookingFor
-                  : ["man", "woman"],
+                  : ["male", "female"],
             },
             age: {
               $gte: user?.ageRange?.min || 18,

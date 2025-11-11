@@ -187,7 +187,7 @@ const userSchema = new mongoose.Schema(
     lookingFor: [
       {
         type: String,
-        enum: ["man", "woman", "coupleMF", "coupleMM", "coupleFF", "TVTSCD"],
+        enum: ["male", "female", "coupleMF", "coupleMM", "coupleFF", "TVTSCD"],
       },
     ],
     ageRange: {

@@ -223,10 +223,10 @@ const getMeets = async (req, res) => {
     }
 
     if (show?.women) {
-      selectedPeople.push("Woman");
+      selectedPeople.push("Female");
     }
     if (show?.men) {
-      selectedPeople.push("Man");
+      selectedPeople.push("Male");
     }
     if (show?.mf) {
       selectedPeople.push("Couple(M/F)");

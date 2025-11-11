@@ -6,7 +6,7 @@ const partnerSchema = new mongoose.Schema(
     lastName: { type: String, trim: true },
     gender: {
       type: String,
-      enum: ["man", "woman", "TVTSCD", "other", "preferNotToSay"],
+      enum: ["male", "female", "TVTSCD", "other", "preferNotToSay"],
     },
     sexuality: {
       type: String,

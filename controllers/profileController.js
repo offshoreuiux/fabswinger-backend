@@ -280,8 +280,8 @@ const getProfile = async (req, res) => {
       return acc;
     }, {});
     const reviewDoneByData = {
-      male: reviewDoneBy.man || 0,
-      female: reviewDoneBy.woman || 0,
+      male: reviewDoneBy.male || 0,
+      female: reviewDoneBy.female || 0,
       couple:
         reviewDoneBy.coupleMF + reviewDoneBy.coupleMM + reviewDoneBy.coupleFF ||
         0,
@@ -607,8 +607,8 @@ const getProfileById = async (req, res) => {
         return acc;
       }, {});
       const reviewDoneByData = {
-        male: reviewDoneBy.man || 0,
-        female: reviewDoneBy.woman || 0,
+        male: reviewDoneBy.male || 0,
+        female: reviewDoneBy.female || 0,
         couple:
           reviewDoneBy.coupleMF +
             reviewDoneBy.coupleMM +

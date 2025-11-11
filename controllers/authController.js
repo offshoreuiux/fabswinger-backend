@@ -330,7 +330,9 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ error: "Server error during login" });
+    res
+      .status(500)
+      .json({ error: "Server error during login", error: error.message });
   }
 };
 
