@@ -139,7 +139,7 @@ const getPosts = async (req, res) => {
     .skip((page - 1) * limit)
     .sort({ createdAt: -1 })
     .populate("channelId", "name image")
-    .populate("createdBy", "username profileImage");
+    .populate("createdBy", "username profileImage settings");
 
   const isLiked = await Like.find({
     postId: posts.map((each) => each._id),
@@ -159,7 +159,7 @@ const getPosts = async (req, res) => {
     userId: req.user.userId,
   });
 
-  const postsWithIsLiked = posts.map((each) => {
+  const postsWithIsLiked = visiblePosts.map((each) => {
     const obj = each.toObject();
     obj.isLiked = isLiked.some((like) => like.postId.equals(each._id))
       ? true

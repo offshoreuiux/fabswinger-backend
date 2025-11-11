@@ -1,6 +1,7 @@
 const Notification = require("../models/NotificationSchema");
 const User = require("../models/user/UserSchema");
 const Comment = require("../models/forum/PostCommentSchema");
+const ProfileView = require("../models/ProfileViewSchema");
 
 class NotificationService {
   // Build clickable HTML link to a user's profile (HashRouter expects #/profile/:id)
@@ -1124,11 +1125,6 @@ class NotificationService {
           return true;
         }
 
-        // Exclude notifications from users with hidden profiles
-        if (sender.settings?.profileVisibility === false) {
-          return false;
-        }
-
         return true;
       });
 
@@ -1141,7 +1137,6 @@ class NotificationService {
         const sender = notification.sender;
         if (!sender) return false;
         if (sender._id.toString() === userId.toString()) return true;
-        if (sender.settings?.profileVisibility === false) return false;
         return true;
       }).length;
 
@@ -1220,7 +1215,7 @@ class NotificationService {
 
       for (const filter of filters) {
         let notifications;
-        
+
         if (filter === "All") {
           notifications = await Notification.find(baseQuery)
             .populate("sender", "settings")
@@ -1245,7 +1240,6 @@ class NotificationService {
           const sender = notification.sender;
           if (!sender) return false;
           if (sender._id.toString() === userId.toString()) return true;
-          if (sender.settings?.profileVisibility === false) return false;
           return true;
         });
 
@@ -1359,11 +1353,6 @@ class NotificationService {
             return true;
           }
 
-          // Exclude hidden profiles
-          if (sender.settings?.profileVisibility === false) {
-            return false;
-          }
-
           return true;
         }
       );
@@ -1409,6 +1398,172 @@ class NotificationService {
     } catch (error) {
       console.error("sendDailyMatchesDigest error:", error);
       return 0;
+    }
+  }
+
+  // Handle profile view notification (weekly aggregation)
+  static async handleProfileViewNotification(profileOwnerId, viewerId) {
+    try {
+      const mongoose = require("mongoose");
+
+      // Don't notify if viewing own profile
+      if (profileOwnerId.toString() === viewerId.toString()) {
+        return null;
+      }
+
+      // Get start and end of current week (Sunday to Saturday)
+      const now = new Date();
+      const dayOfWeek = now.getDay(); // 0 (Sunday) to 6 (Saturday)
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - dayOfWeek);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      console.log("Profile View Notification Debug:");
+      console.log("- profileOwnerId:", profileOwnerId);
+      console.log("- viewerId:", viewerId);
+      console.log("- Week range:", startOfWeek, "to", endOfWeek);
+
+      // Convert to ObjectId if needed
+      const ownerObjectId = mongoose.Types.ObjectId.isValid(profileOwnerId)
+        ? new mongoose.Types.ObjectId(profileOwnerId)
+        : profileOwnerId;
+
+      const viewerObjectId = mongoose.Types.ObjectId.isValid(viewerId)
+        ? new mongoose.Types.ObjectId(viewerId)
+        : viewerId;
+
+      // Debug: Check all views for this profile owner
+      const allViewsForOwner = await ProfileView.find({
+        profileOwner: ownerObjectId,
+      }).lean();
+      console.log(
+        "- Total views in DB for this owner:",
+        allViewsForOwner.length
+      );
+      console.log("- Sample views:", allViewsForOwner.slice(0, 3));
+
+      // Debug: Check views in this week range
+      const viewsInWeekRange = await ProfileView.find({
+        profileOwner: ownerObjectId,
+        viewedAt: { $gte: startOfWeek, $lte: endOfWeek },
+      }).lean();
+      console.log("- Views in week range:", viewsInWeekRange.length);
+
+      // Count unique viewers this week (excluding the profile owner)
+      const viewsThisWeek = await ProfileView.aggregate([
+        {
+          $match: {
+            profileOwner: ownerObjectId,
+            viewedAt: { $gte: startOfWeek, $lte: endOfWeek },
+            viewer: { $ne: ownerObjectId },
+          },
+        },
+        {
+          $group: {
+            _id: "$viewer",
+          },
+        },
+        {
+          $count: "totalViewers",
+        },
+      ]);
+
+      console.log("- viewsThisWeek aggregate result:", viewsThisWeek);
+
+      let viewerCount = viewsThisWeek[0]?.totalViewers || 0;
+
+      // If aggregate returns 0, count manually to ensure accuracy
+      if (viewerCount === 0) {
+        const manualCount = await ProfileView.countDocuments({
+          profileOwner: ownerObjectId,
+          viewedAt: { $gte: startOfWeek, $lte: endOfWeek },
+          viewer: { $ne: ownerObjectId },
+        });
+        console.log("- Manual count:", manualCount);
+        viewerCount = manualCount;
+      }
+
+      console.log("- Final viewerCount:", viewerCount);
+
+      // Only create/update notification if there are viewers
+      if (viewerCount === 0) {
+        console.log("- No viewers to notify about");
+        return null;
+      }
+
+      // Find existing profile_view notification for this week
+      const existingNotification = await Notification.findOne({
+        recipient: profileOwnerId,
+        type: "profile_view",
+        createdAt: { $gte: startOfWeek, $lte: endOfWeek },
+        isDeleted: false,
+      });
+
+      if (existingNotification) {
+        // Update existing notification
+        existingNotification.message = `<p class="text-sm font-medium text-zinc-900">${viewerCount} ${
+          viewerCount === 1 ? "person has" : "people have"
+        } viewed your profile this week</p>`;
+        existingNotification.metadata = {
+          viewerCount,
+          weekStart: startOfWeek,
+          weekEnd: endOfWeek,
+        };
+        existingNotification.isRead = false; // Mark as unread to bring attention
+        existingNotification.createdAt = new Date(); // Update to move to top
+
+        await existingNotification.save();
+
+        // Emit updated notification
+        try {
+          const {
+            emitNotification,
+            emitUnreadCountUpdate,
+          } = require("../utils/socket");
+
+          await existingNotification.populate(
+            "sender",
+            "nickname profileImage"
+          );
+          emitNotification(profileOwnerId, existingNotification);
+
+          const unreadCount = await this.getUnreadCount(profileOwnerId);
+          emitUnreadCountUpdate(profileOwnerId, unreadCount);
+        } catch (socketError) {
+          console.error("Socket emission error:", socketError);
+        }
+
+        return existingNotification;
+      } else {
+        // Create new notification for this week
+        const viewer = await User.findById(viewerId).select(
+          "nickname profileImage"
+        );
+
+        const notificationData = {
+          recipient: profileOwnerId,
+          sender: viewerId,
+          type: "profile_view",
+          title: "Profile Views",
+          message: `<p class="text-sm font-medium text-zinc-900">${viewerCount} ${
+            viewerCount === 1 ? "person has" : "people have"
+          } viewed your profile this week</p>`,
+          metadata: {
+            viewerCount,
+            weekStart: startOfWeek,
+            weekEnd: endOfWeek,
+          },
+        };
+
+        return await this.createNotification(notificationData);
+      }
+    } catch (error) {
+      console.error("Error handling profile view notification:", error);
+      throw error;
     }
   }
 }

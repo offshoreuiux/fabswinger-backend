@@ -29,6 +29,7 @@ const adminRoutes = require("./routes/admin/adminRoute");
 const verificationRoutes = require("./routes/verificationRoutes");
 const subscriptionRoutes = require("./routes/payment/subscriptionRoute");
 const webhookRoutes = require("./routes/payment/webhookRoute");
+const profileViewRoutes = require("./routes/profileViewRoutes");
 const NotificationService = require("./services/notificationService");
 const { generateDailyMatchesEmail } = require("./utils/emailTemplates");
 const transporter = require("./utils/transporter");
@@ -76,6 +77,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/verification", verificationRoutes);
 app.use("/api/subscription", subscriptionRoutes);
 app.use("/api/webhooks", webhookRoutes);
+app.use("/api/profile-view", profileViewRoutes);
 
 // Seed default admin user if missing
 (async () => {

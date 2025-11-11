@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const partnerSchema = require("./PartnerSchema");
 
 // Define schema
 const userSchema = new mongoose.Schema(
@@ -82,6 +83,10 @@ const userSchema = new mongoose.Schema(
         "other",
         "preferNotToSay",
       ],
+    },
+    partner: {
+      type: partnerSchema,
+      default: {},
     },
     sexuality: {
       type: String,
@@ -192,7 +197,7 @@ const userSchema = new mongoose.Schema(
       },
       max: {
         type: Number,
-        default: 65,
+        default: 55,
       },
     },
     preferences: {
@@ -268,7 +273,7 @@ const userSchema = new mongoose.Schema(
         getFriendInvites: true,
         newMembersMatchMyRequirements: true,
         profileVisibility: true,
-        // whosLookedAtMe: true,
+        whosLookedAtMe: true,
         friendsListVisibility: true,
         photoFabFeature: true,
         nonMemberVisibility: true,

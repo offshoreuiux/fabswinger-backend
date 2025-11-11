@@ -600,12 +600,6 @@ const getPosts = async (req, res) => {
           $or: [
             // Show user's own posts
             { userId: currentUserIdObj },
-            // Show posts from visible profiles
-            { "userInfoFirst.settings.profileVisibility": { $ne: false } },
-            // Show posts where profileVisibility doesn't exist (old records)
-            {
-              "userInfoFirst.settings.profileVisibility": { $exists: false },
-            },
           ],
         },
       },
@@ -1166,6 +1160,7 @@ const unhotlistPost = async (req, res) => {
 const getPostsByUserId = async (req, res) => {
   try {
     const { userId } = req.params;
+    const currentUserId = req.user.userId;
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
     }
@@ -1173,10 +1168,14 @@ const getPostsByUserId = async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
-    if (!user.settings.profileVisibility && user.id !== req.user.userId) {
-      return res.status(404).json({ error: "User's profile is hidden" });
+
+    const query = { userId };
+
+    if (currentUserId !== userId) {
+      query.privacy = "public";
     }
-    const posts = await Post.find({ userId }).lean();
+
+    const posts = await Post.find(query).lean();
     // Separate media by inferring type from file extension in image URLs
     // Treat common video extensions as videos; everything else stays as images
     const videoExtensions = [

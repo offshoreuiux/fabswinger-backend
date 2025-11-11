@@ -79,6 +79,8 @@ const signup = async (req, res) => {
       password,
       keepSignedIn,
       geoLocation,
+      gender,
+      dateOfBirth,
       recaptchaToken,
       affiliateCode,
     } = req.body;
@@ -118,6 +120,8 @@ const signup = async (req, res) => {
       email,
       password: hashedPassword,
       keepSignedIn: keepSignedIn || false,
+      gender,
+      dateOfBirth,
       geoLocation,
       affiliateOf: affiliateCode,
     });
@@ -189,6 +193,8 @@ const signup = async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         isVerified: newUser.isVerified,
+        gender: newUser.gender,
+        dateOfBirth: newUser.dateOfBirth,
       },
     });
   } catch (error) {
@@ -232,6 +238,11 @@ const login = async (req, res) => {
         .json({ error: "Invalid username/email or password" });
     }
 
+    // Block login for deactivated users
+    if (user.isActive === false) {
+      return res.status(403).json({ error: "Account is deactivated" });
+    }
+
     if (!user.isVerified && user.role != "admin") {
       const hasAppliedForVerification = await Verification.findOne({
         userId: user._id,
@@ -263,17 +274,19 @@ const login = async (req, res) => {
       }
     }
 
+    // if (!user.oneIdAgeOver18Verified) {
+    //   return res.status(400).json({
+    //     error: "You are not verified yet, please verify your age",
+    //     success: false,
+    //   });
+    // }
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res
         .status(400)
         .json({ error: "Invalid username/email or password" });
-    }
-
-    // Block login for deactivated users
-    if (user.isActive === false) {
-      return res.status(403).json({ error: "Account is deactivated" });
     }
 
     // Use user's keepSignedIn preference if not explicitly provided in login

@@ -307,7 +307,6 @@ const getMeets = async (req, res) => {
           .sort({ createdAt: -1 });
         break;
     }
-
     // Add hotlist information to events
     const meetsWithHotlistInfo = await addHotlistInfoToMeets(meets, userId);
     const meetsWithParticipantDetails = await addParticipantDetailsToMeets(

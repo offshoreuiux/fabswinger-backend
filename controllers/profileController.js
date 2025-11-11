@@ -14,12 +14,107 @@ const SubscriptionSchema = require("../models/payment/SubscriptionSchema");
 const PostWink = require("../models/post/PostWinkSchema");
 
 // Update user profile
+// const updateProfile = async (req, res) => {
+//   try {
+//     const userId = req.user.userId;
+//     const updateData = { ...req.body };
+
+//     // Remove sensitive fields that shouldn't be updated via this endpoint
+//     const sensitiveFields = [
+//       "password",
+//       "email",
+//       "username",
+//       "isVerified",
+//       "isActive",
+//       "role",
+//       "createdAt",
+//       "_id",
+//       "__v",
+//     ];
+
+//     sensitiveFields.forEach((field) => {
+//       delete updateData[field];
+//     });
+
+//     // Filter out empty strings for enum fields to prevent validation errors
+//     const enumFields = ["gender", "sexuality", "bodyType", "ethnicity"];
+//     enumFields.forEach((field) => {
+//       if (updateData[field] === "") {
+//         delete updateData[field];
+//       }
+//     });
+
+//     // Handle partner logic:
+//     // 1️⃣ If the user is a couple type, keep or update partner data
+//     // 2️⃣ Otherwise, remove partner field entirely
+//     const coupleGenders = ["coupleMF", "coupleFF", "coupleMM"];
+
+//     if (updateData.gender && !coupleGenders.includes(updateData.gender)) {
+//       updateData.partner = null;
+//     } else if (updateData.partner) {
+//       // Ensure nested partner fields are validated correctly
+//       // Remove empty strings
+//       Object.keys(updateData.partner).forEach((key) => {
+//         if (updateData.partner[key] === "") delete updateData.partner[key];
+//       });
+//     }
+
+//     // Check if profile is being completed
+//     if (updateData.profileCompleted === true) {
+//       // Validate required fields for profile completion
+//       const requiredFields = ["nickname", "gender", "dateOfBirth"];
+//       const missingFields = requiredFields.filter(
+//         (field) => !updateData[field]
+//       );
+
+//       if (missingFields.length > 0) {
+//         return res.status(400).json({
+//           error: `Missing required fields: ${missingFields.join(", ")}`,
+//         });
+//       }
+//     }
+
+//     // Add updatedAt timestamp
+//     updateData.updatedAt = new Date();
+
+//     // const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
+//     //   new: true,
+//     //   runValidators: true,
+//     // }).select("-password");
+
+//     const updatedUser = await User.findByIdAndUpdate(
+//       userId,
+//       { $set: updateData },
+//       { new: true, runValidators: true }
+//     ).select("-password");
+
+//     if (!updatedUser) {
+//       return res.status(404).json({ error: "User not found" });
+//     }
+
+//     console.log(`✅ Update Profile API successful for userId: ${userId}`);
+
+//     res.json({
+//       message: "Profile updated successfully",
+//       user: updatedUser,
+//     });
+//   } catch (error) {
+//     console.error("Profile update error:", error);
+//     res.status(500).json({ error: "Server error during profile update" });
+//   }
+// };
+
 const updateProfile = async (req, res) => {
   try {
     const userId = req.user.userId;
     const updateData = { ...req.body };
 
-    // Remove sensitive fields that shouldn't be updated via this endpoint
+    if (updateData.partnerDetails) {
+      updateData.partner = updateData.partnerDetails;
+      delete updateData.partnerDetails;
+    }
+
+    //Remove sensitive fields
     const sensitiveFields = [
       "password",
       "email",
@@ -31,27 +126,33 @@ const updateProfile = async (req, res) => {
       "_id",
       "__v",
     ];
+    sensitiveFields.forEach((field) => delete updateData[field]);
 
-    sensitiveFields.forEach((field) => {
-      delete updateData[field];
-    });
-
-    // Filter out empty strings for enum fields to prevent validation errors
+    // 🧹 Clean up enum fields
     const enumFields = ["gender", "sexuality", "bodyType", "ethnicity"];
     enumFields.forEach((field) => {
-      if (updateData[field] === "") {
-        delete updateData[field];
-      }
+      if (updateData[field] === "") delete updateData[field];
     });
 
-    // Check if profile is being completed
+    // 👥 Handle partner logic
+    const coupleGenders = ["coupleMF", "coupleFF", "coupleMM"];
+
+    if (updateData.gender && !coupleGenders.includes(updateData.gender)) {
+      // Not a couple → remove partner data
+      updateData.partner = null;
+    } else if (updateData.partner) {
+      // Clean nested partner fields
+      Object.keys(updateData.partner).forEach((key) => {
+        if (updateData.partner[key] === "") delete updateData.partner[key];
+      });
+    }
+
+    // Validate profile completion
     if (updateData.profileCompleted === true) {
-      // Validate required fields for profile completion
       const requiredFields = ["nickname", "gender", "dateOfBirth"];
       const missingFields = requiredFields.filter(
         (field) => !updateData[field]
       );
-
       if (missingFields.length > 0) {
         return res.status(400).json({
           error: `Missing required fields: ${missingFields.join(", ")}`,
@@ -59,20 +160,32 @@ const updateProfile = async (req, res) => {
       }
     }
 
-    // Add updatedAt timestamp
     updateData.updatedAt = new Date();
 
-    const updatedUser = await User.findByIdAndUpdate(userId, updateData, {
-      new: true,
-      runValidators: true,
-    }).select("-password");
+    const setData = {};
+
+    Object.entries(updateData).forEach(([key, value]) => {
+      if (key === "partner" && typeof value === "object" && value !== null) {
+        // Flatten partner fields to ensure deep save
+        Object.entries(value).forEach(([pKey, pValue]) => {
+          setData[`partner.${pKey}`] = pValue;
+        });
+      } else {
+        setData[key] = value;
+      }
+    });
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: setData },
+      { new: true, runValidators: true }
+    ).select("-password");
 
     if (!updatedUser) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    console.log(`✅ Update Profile API successful for userId: ${userId}`);
-
+    console.log(` Update Profile API successful for userId: ${userId}`);
     res.json({
       message: "Profile updated successfully",
       user: updatedUser,
@@ -111,7 +224,7 @@ const updatePassword = async (req, res) => {
     user.password = hashedPassword;
     await user.save();
 
-    console.log(`✅ Update Password API successful for userId: ${userId}`);
+    console.log(` Update Password API successful for userId: ${userId}`);
 
     res.json({ message: "Password updated successfully" });
   } catch (error) {
@@ -364,8 +477,6 @@ const getProfiles = async (req, res) => {
       }
     }
 
-    // Only show profiles where profileVisibility is true
-    query["settings.profileVisibility"] = true;
     query.role = "user";
 
     // Get total count for pagination info
@@ -460,12 +571,6 @@ const getProfileById = async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
-    }
-
-    if (!user.settings.profileVisibility && user.id !== loggedInUserId) {
-      return res
-        .status(404)
-        .json({ error: "User's profile is hidden", hidden: true });
     }
 
     // Check for pending friend requests between logged-in user and this profile
@@ -853,7 +958,6 @@ const createUserReview = async (req, res) => {
 const getUserReviews = async (req, res) => {
   try {
     const { userId } = req.params;
-    const currentUserId = req.user?.userId; // Get the current user making the request
 
     if (!userId) {
       return res.status(400).json({ error: "User ID is required" });
@@ -864,27 +968,8 @@ const getUserReviews = async (req, res) => {
       .populate("reviewedId", "username profileImage settings")
       .sort({ createdAt: -1 });
 
-    // Filter out reviews from users with hidden profiles
-    const userReviews = allReviews.filter((review) => {
-      const reviewer = review.reviewerId;
-
-      // If reviewer doesn't exist or is deleted, exclude the review
-      if (!reviewer) {
-        return false;
-      }
-
-      // Allow current user to see their own reviews
-      if (currentUserId && reviewer._id.toString() === currentUserId) {
-        return true;
-      }
-
-      // Exclude reviews from users with hidden profiles
-      if (reviewer.settings?.profileVisibility === false) {
-        return false;
-      }
-
-      return true;
-    });
+    // Filter out reviews where reviewer record no longer exists
+    const userReviews = allReviews.filter((review) => !!review.reviewerId);
 
     console.log("userReviews", userReviews.length);
     console.log(

@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.925.0",
     "@sendgrid/mail": "^8.1.6",
     "aws-sdk": "^2.1692.0",
     "bcryptjs": "^3.0.2",
@@ -23,7 +24,7 @@
     "mongoose": "^8.17.0",
     "multer": "^2.0.2",
     "node-fetch": "^3.3.2",
-    "nodemailer": "^7.0.6",
+    "nodemailer": "^7.0.10",
     "nodemon": "^3.1.10",
     "redis": "^5.8.1",
     "socket.io": "^4.8.1",
