@@ -72,7 +72,7 @@ function initSocket(server) {
         socket.join(`user-${userId}`);
 
         // Check user role before tracking online status
-        const user = await User.findById(userId).select("role").lean();
+        const user = await User.findById(userId).select("role isVerified oneIdAgeOver18Verified").lean();
 
         console.log("user", user);
 
