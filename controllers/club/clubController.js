@@ -5,6 +5,8 @@ const { v4: uuidv4 } = require("uuid");
 const Event = require("../../models/event/EventSchema");
 const Meet = require("../../models/meet/MeetSchema");
 const ClubReview = require("../../models/club/ClubReviewSchema");
+const MeetParticipant = require("../../models/meet/MeetParticipantSchema");
+const EventParticipant = require("../../models/event/EventParticipantSchema");
 const mongoose = require("mongoose");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
@@ -194,7 +196,10 @@ const getClubs = async (req, res) => {
               { name: { $regex: search, $options: "i" } },
               { location: { $regex: location, $options: "i" } },
               {
-                $or: [{ isVerified: true }, { owner: new mongoose.Types.ObjectId(userId) }],
+                $or: [
+                  { isVerified: true },
+                  { owner: new mongoose.Types.ObjectId(userId) },
+                ],
               },
             ],
             ...query, // like region, type, geo filters if needed
@@ -249,7 +254,10 @@ const getClubs = async (req, res) => {
                 location: { $regex: location, $options: "i" },
               },
               {
-                $or: [{ isVerified: true }, { owner: new mongoose.Types.ObjectId(userId) }],
+                $or: [
+                  { isVerified: true },
+                  { owner: new mongoose.Types.ObjectId(userId) },
+                ],
               },
             ],
           },
@@ -653,28 +661,71 @@ const getClubById = async (req, res) => {
     const club = await Club.findById(id)
       .populate({
         path: "events",
-        populate: {
-          path: "participants",
-          populate: {
-            path: "userId",
-            select: "username profileImage",
-          },
+        match: {
+          date: { $gte: new Date() },
         },
+        options: { sort: { date: 1 } },
       })
       .populate({
         path: "meets",
-        populate: {
-          path: "participants",
-          populate: {
-            path: "userId",
-            select: "username profileImage",
-          },
+        match: {
+          date: { $gte: new Date() },
         },
+        options: { sort: { date: 1 } },
         populate: {
           path: "userId",
           select: "username profileImage",
         },
       });
+
+    const clubObject = club?.toObject ? club.toObject() : club;
+
+    const meetsData = await Promise.all(
+      (clubObject?.meets || []).map(async (meetDoc) => {
+        const meet =
+          typeof meetDoc?.toObject === "function"
+            ? meetDoc.toObject()
+            : meetDoc;
+
+        const participants = await MeetParticipant.find({ meetId: meet._id })
+          .populate({
+            path: "userId",
+            select: "username profileImage",
+          })
+          .lean();
+
+        return {
+          ...meet,
+          participants,
+        };
+      })
+    );
+
+    const eventsData = await Promise.all(
+      (clubObject?.events || []).map(async (eventDoc) => {
+        const event =
+          typeof eventDoc?.toObject === "function"
+            ? eventDoc.toObject()
+            : eventDoc;
+
+        const participants = await EventParticipant.find({
+          eventId: event._id,
+        })
+          .populate({
+            path: "userId",
+            select: "username profileImage",
+          })
+          .lean();
+
+        return {
+          ...event,
+          participants,
+        };
+      })
+    );
+
+    clubObject.meets = meetsData;
+    clubObject.events = eventsData;
 
     const reviews = await ClubReview.find({ clubId: id });
     let averageRating = 0;
@@ -685,9 +736,9 @@ const getClubById = async (req, res) => {
       );
       averageRating = Math.round((totalRating / reviews.length) * 10) / 10; // one decimal place
     }
-    club.rating = averageRating;
+    clubObject.rating = averageRating;
 
-    res.status(200).json({ club });
+    res.status(200).json({ club: clubObject });
   } catch (error) {
     res
       .status(500)
