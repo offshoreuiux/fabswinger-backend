@@ -322,7 +322,7 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
         success: false,
       });
     }
-
+    console.log("user", user);
     const tokenExpiration = user.keepSignedIn ? "30d" : "7d";
     const token = jwt.sign(
       { userId: user._id, role: user.role },
