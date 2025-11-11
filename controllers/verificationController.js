@@ -4,6 +4,7 @@ const Club = require("../models/club/ClubSchema");
 const { s3 } = require("../utils/s3");
 const { v4: uuidv4 } = require("uuid");
 const { sendMail } = require("../utils/transporter");
+const jwt = require("jsonwebtoken");
 const {
   generateVerificationSubmittedEmail,
   generateAdminVerificationNotificationEmail,
@@ -290,23 +291,59 @@ const callbackAgeOver18VerifyUser = async (req, res) => {
 
     let user = await User.findById(userId);
 
-    if (verificationData.age_over_18) {
-      if (user) {
-        user.oneIdAgeOver18Verified = true;
-        await user.save();
-      }
-    } else {
+    if (!verificationData.age_over_18) {
       if (user) {
         await user.deleteOne();
         console.log("🗑️ User deleted - not age over 18");
       }
+      return res.status(403).json({
+        message: "User is not age verified",
+        success: false,
+      });
     }
+
+    if (user) {
+      user.oneIdAgeOver18Verified = true;
+      await user.save();
+    }
+
+    if (!user) {
+      console.warn("⚠️ Verified user record not found during callback");
+      return res.status(404).json({
+        message: "Verified user not found",
+        success: false,
+      });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error("❌ JWT_SECRET not configured");
+      return res.status(500).json({
+        message: "Authentication configuration missing",
+        success: false,
+      });
+    }
+
+    const tokenExpiration = user.keepSignedIn ? "30d" : "7d";
+    const token = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: tokenExpiration }
+    );
 
     return res.status(200).json({
       message: "User age over 18 verified successfully",
-      verificationData,
       success: true,
-      user,
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified,
+        gender: user.gender,
+        dateOfBirth: user.dateOfBirth,
+      },
+      verificationData,
     });
   } catch (error) {
     console.error("❌ Error verifying user:", error?.message || error);
