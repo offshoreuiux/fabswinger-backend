@@ -1186,7 +1186,7 @@ class NotificationService {
         "post_reply",
         "forum_comment",
       ],
-      Messages: ["message", "profile_view"],
+      Messages: ["message"],
     };
 
     return filterMap[filter] || [];
