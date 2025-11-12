@@ -28,11 +28,11 @@ const applyToEvent = async (req, res) => {
       });
     }
 
-    // 🔹 Step 3: Fetch subscription status
+    // Fetch subscription status
     const subscription = await SubscriptionSchema.findOne({ userId });
     const isSubscribed = subscription?.status === "active";
 
-    // 🔹 Step 4: Fetch all approved event participations (excluding creators)
+    // Fetch all approved event participations (excluding creators)
     const approvedParticipants = await EventParticipant.find({
       userId,
       isCreator: false, // ✅ exclude events they created
@@ -41,7 +41,7 @@ const applyToEvent = async (req, res) => {
 
     const now = new Date();
 
-    // 🔹 Step 5: Filter active events (upcoming)
+    // Filter active events (upcoming)
     const activeEvents = approvedParticipants.filter((p) => {
       if (!p.eventId || !p.eventId.date) return false;
 
@@ -59,7 +59,7 @@ const applyToEvent = async (req, res) => {
 
     const activeCount = activeEvents.length;
 
-    // 🔹 Step 6: Enforce participation limits
+    //  Enforce participation limits
     if (!isSubscribed && activeCount >= 1) {
       return res.status(403).json({
         error:

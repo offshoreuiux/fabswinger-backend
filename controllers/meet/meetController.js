@@ -262,6 +262,8 @@ const getMeets = async (req, res) => {
       };
     } else if (when === "upcoming") {
       query.date = { $gte: new Date() };
+    } else if (when === "anytime") {
+      // ✅ Do NOT apply any date filter — show all meets
     } else {
       query.date = { $gte: new Date() };
     }
@@ -271,7 +273,7 @@ const getMeets = async (req, res) => {
     }
 
     if (countryRegion && countryRegion !== "all") {
-      query.country = countryRegion.toLowerCase();
+      query.country = countryRegion;
     }
 
     console.log("query", query);
