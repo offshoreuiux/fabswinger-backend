@@ -286,7 +286,7 @@ const getMeets = async (req, res) => {
         meets = await Meet.find(query)
           .skip(skip)
           .limit(parseInt(limit))
-          .populate("userId", "username profileImage")
+          .populate("userId", "username profileImage isVerified")
           .sort({ createdAt: -1 });
         break;
       case "history":
@@ -296,7 +296,7 @@ const getMeets = async (req, res) => {
         meets = await Meet.find(query)
           .skip(skip)
           .limit(parseInt(limit))
-          .populate("userId", "username profileImage")
+          .populate("userId", "username profileImage isVerified")
           .sort({ createdAt: -1 });
         break;
       default: // 'all'
@@ -305,7 +305,7 @@ const getMeets = async (req, res) => {
         meets = await Meet.find(query)
           .skip(skip)
           .limit(parseInt(limit))
-          .populate("userId", "username profileImage")
+          .populate("userId", "username profileImage isVerified")
           .sort({ createdAt: -1 });
         break;
     }
@@ -445,7 +445,7 @@ const getMeetById = async (req, res) => {
 
     const meet = await Meet.findById(id).populate(
       "userId",
-      "username profileImage"
+      "username profileImage isVerified"
     );
 
     if (!meet) {

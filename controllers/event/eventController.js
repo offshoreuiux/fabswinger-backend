@@ -121,12 +121,12 @@ const createEvent = async (req, res) => {
     const subscription = await SubscriptionSchema.findOne({ userId });
     console.log("subscription?.status:", subscription?.status);
 
-    if (!subscription || subscription.status !== "active") {
-      return res.status(403).json({
-        success: false,
-        message: "You need an active subscription to create events.",
-      });
-    }
+    // if (!subscription || subscription.status !== "active") {
+    //   return res.status(403).json({
+    //     success: false,
+    //     message: "You need an active subscription to create events.",
+    //   });
+    // }
 
     //Count user's active events (not completed)
     const userEvents = await Event.find({ userId });
@@ -146,13 +146,13 @@ const createEvent = async (req, res) => {
     console.log("Event Count : ", count);
 
     //Apply event creation limits
-    if (subscription.status === "active" && count >= 5) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "Event limit reached. You can have up to 5 active events at a time.",
-      });
-    }
+    // if (subscription.status === "active" && count >= 5) {
+    //   return res.status(403).json({
+    //     success: false,
+    //     message:
+    //       "Event limit reached. You can have up to 5 active events at a time.",
+    //   });
+    // }
 
     // Parse ageRange from JSON string to array
     let ageRange;

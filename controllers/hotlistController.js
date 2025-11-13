@@ -16,7 +16,7 @@ const getProfileHotlist = async (req, res) => {
       const profileHotlist = await ProfileHotlist.find(query)
         .populate(
           "profileId",
-          "username profileImage about lookingFor firstName lastName age dateOfBirth"
+          "username profileImage about lookingFor firstName lastName age dateOfBirth isVerified"
         )
         .lean();
 
@@ -77,7 +77,7 @@ const getProfileHotlist = async (req, res) => {
       const profileHotlist = await ProfileHotlist.find(query)
         .populate(
           "profileId",
-          "username profileImage about lookingFor firstName lastName age dateOfBirth"
+          "username profileImage about lookingFor firstName lastName age dateOfBirth isVerified"
         )
         .skip((page - 1) * limit)
         .limit(parseInt(limit))
