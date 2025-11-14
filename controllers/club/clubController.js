@@ -123,7 +123,14 @@ const getClubs = async (req, res) => {
     const skip = (page - 1) * limit;
     const userId = req.user.userId;
     console.log("userId===========", userId);
-    const { type, region, distance, discover, sort } = JSON.parse(filter);
+    //const { type, region, distance, discover, sort } = JSON.parse(filter);
+
+    let type, region, distance, discover, sort;
+    if (filter) {
+      try {
+        ({ type, region, distance, discover, sort } = JSON.parse(filter));
+      } catch {}
+    }
     const query = {};
 
     if (type) query.type = type;

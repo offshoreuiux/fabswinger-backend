@@ -159,7 +159,7 @@ const getPosts = async (req, res) => {
     userId: req.user.userId,
   });
 
-  const postsWithIsLiked = visiblePosts.map((each) => {
+  const postsWithIsLiked = posts.map((each) => {
     const obj = each.toObject();
     obj.isLiked = isLiked.some((like) => like.postId.equals(each._id))
       ? true

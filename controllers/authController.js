@@ -243,36 +243,36 @@ const login = async (req, res) => {
       return res.status(403).json({ error: "Account is deactivated" });
     }
 
-    if (!user.isVerified && user.role != "admin") {
-      const hasAppliedForVerification = await Verification.findOne({
-        userId: user._id,
-        type: "user",
-        status: "pending",
-      });
-      if (hasAppliedForVerification) {
-        return res.status(400).json({
-          error:
-            "You have already applied for verification, please wait for approval",
-        });
-      } else {
-        const verification = await Verification.findOne({
-          userId: user._id,
-          type: "user",
-          status: "rejected",
-        });
-        if (verification) {
-          return res.status(400).json({
-            error:
-              "Your verification request has been rejected, please apply for verification again",
-          });
-        } else {
-          return res.status(400).json({
-            error:
-              "You have not applied for verification yet, please apply for verification now",
-          });
-        }
-      }
-    }
+    // if (!user.isVerified && user.role != "admin") {
+    //   const hasAppliedForVerification = await Verification.findOne({
+    //     userId: user._id,
+    //     type: "user",
+    //     status: "pending",
+    //   });
+    //   if (hasAppliedForVerification) {
+    //     return res.status(400).json({
+    //       error:
+    //         "You have already applied for verification, please wait for approval",
+    //     });
+    //   } else {
+    //     const verification = await Verification.findOne({
+    //       userId: user._id,
+    //       type: "user",
+    //       status: "rejected",
+    //     });
+    //     if (verification) {
+    //       return res.status(400).json({
+    //         error:
+    //           "Your verification request has been rejected, please apply for verification again",
+    //       });
+    //     } else {
+    //       return res.status(400).json({
+    //         error:
+    //           "You have not applied for verification yet, please apply for verification now",
+    //       });
+    //     }
+    //   }
+    // }
 
     if (!user.oneIdAgeOver18Verified) {
       return res.status(400).json({
